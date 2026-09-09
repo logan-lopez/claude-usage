@@ -14,6 +14,9 @@ export interface IngestResult {
   toolCalls: number;
   partialTail: number;
   rewound: number;
+  /** Sessions whose request_count was recomputed. Counts repeats across files:
+   *  one session spanning three transcripts is rolled up three times. */
+  sessionsRolledUp: number;
 }
 
 /** Every *.jsonl under the transcript root, including subagent transcripts,
@@ -211,7 +214,7 @@ export function ingestTranscripts(
   const res: IngestResult = {
     filesSeen: files.length, filesRead: 0, bytesRead: 0, linesParsed: 0,
     parseErrors: 0, assistantRecords: 0, costStateRecords: 0, toolCalls: 0,
-    partialTail: 0, rewound: 0,
+    partialTail: 0, rewound: 0, sessionsRolledUp: 0,
   };
 
   const upsertRequest = db.prepare(UPSERT_REQUEST);
@@ -230,10 +233,15 @@ export function ingestTranscripts(
       offset = excluded.offset, updated_ms = excluded.updated_ms
   `);
 
+  // Sessions whose request rows changed while reading the current file. The
+  // roll-up is recomputed for these and only these -- see rollupSessions.
+  const touched = new Set<string>();
+
   // One transaction per file, not per run. The first ingest is 335 MB cold
   // under launchd; a killed run must resume, not restart.
   const commitFile = db.transaction(
     (lines: string[], meta: { path: string; inode: number; size: number; mtimeMs: number; offset: number }) => {
+      touched.clear();
       for (const line of lines) {
         if (!line) continue;
         res.linesParsed++;
@@ -246,6 +254,12 @@ export function ingestTranscripts(
         }
         applyRecord(rec);
       }
+      // Inside the same transaction as the offset advance, deliberately. If
+      // the roll-up ran after the loop over files instead, a run killed
+      // partway would leave the offset advanced and the counts stale, and no
+      // later run would ever revisit those bytes to fix them.
+      rollupSessions(db, touched);
+      res.sessionsRolledUp += touched.size;
       putState.run({
         $path: meta.path, $inode: meta.inode, $size: meta.size,
         $mtime_ms: meta.mtimeMs, $offset: meta.offset, $updated_ms: Date.now(),
@@ -337,6 +351,9 @@ export function ingestTranscripts(
       $web_search_requests: num(usage.server_tool_use?.web_search_requests),
       $web_fetch_requests: num(usage.server_tool_use?.web_fetch_requests),
     });
+    // Even when the keep-max WHERE rejected the row: a rejected upsert cannot
+    // change the count, and recomputing one extra session is free.
+    touched.add(sessionId);
 
     // Tool *names* only. Never the input, never the result.
     if (Array.isArray(msg.content)) {
@@ -403,7 +420,6 @@ export function ingestTranscripts(
     res.bytesRead += lastNl + 1;
   }
 
-  rollupSessions(db);
   return res;
 }
 
@@ -428,12 +444,30 @@ function readRange(path: string, start: number, end: number): Uint8Array {
   }
 }
 
-/** message_count is recomputed rather than incremented: incremental ingest
- *  only ever sees new lines, and a counter would double-count a re-read. */
-export function rollupSessions(db: Database): void {
-  db.run(`
-    UPDATE sessions SET message_count = COALESCE((
-      SELECT COUNT(*) FROM requests r WHERE r.session_id = sessions.session_id
+/**
+ * Recompute `sessions.request_count` by counting, never by incrementing: a
+ * counter would double-count the streaming duplicates that the keep-max upsert
+ * collapses, and would drift on any re-read.
+ *
+ * Pass the sessions a run actually touched. Rewriting all 509 rows on every
+ * sync -- including the 15-minute limits-only runs, which read no transcripts
+ * at all -- was doing a full table scan to change nothing. Omit the argument
+ * for the full sweep, which is now only for repair.
+ */
+export function rollupSessions(db: Database, sessionIds?: Iterable<string>): void {
+  if (sessionIds === undefined) {
+    db.run(`
+      UPDATE sessions SET request_count = COALESCE((
+        SELECT COUNT(*) FROM requests r WHERE r.session_id = sessions.session_id
+      ), 0)
+    `);
+    return;
+  }
+  const one = db.query(`
+    UPDATE sessions SET request_count = COALESCE((
+      SELECT COUNT(*) FROM requests r WHERE r.session_id = ?1
     ), 0)
+    WHERE session_id = ?1
   `);
+  for (const id of sessionIds) one.run(id);
 }

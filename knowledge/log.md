@@ -1,4 +1,7 @@
 ## 2026-09-09
+* **Update**: Linked `architecture/session-rollup-scoped-to-read-files.md` to `findings/corpus-shape-2026-09-09.md` (The 510 sessions and 8,913 requests that made the full-table roll-up measurable waste).
+* **Update**: Updated concept `architecture/session-rollup-scoped-to-read-files.md`.
+* **Creation**: Documented concept `architecture/session-rollup-scoped-to-read-files.md` (sessions.request_count is rolled up only for the files a sync actually read).
 * **Update**: Linked `architecture/live-oauth-fetch-with-guard.md` to `findings/corpus-shape-2026-09-09.md` (The measurements that showed the cached snapshot was 27h stale and weekly_scoped is nowhere on disk).
 * **Update**: Updated concept `architecture/live-oauth-fetch-with-guard.md`.
 * **Update**: Linked `architecture/limits-reconciled-by-freshness.md` to `architecture/live-oauth-fetch-with-guard.md` (The live source that made an honest reconciliation possible).

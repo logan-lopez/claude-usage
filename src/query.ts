@@ -32,7 +32,11 @@ export interface SessionRow extends TokenTotals {
   entrypoint: string | null;
   first_ts: string | null;
   last_ts: string | null;
-  message_count: number;
+  // No request count here: `requests`, inherited from TokenTotals, already is
+  // one, counted live over the same rows. sessions.request_count is the cached
+  // copy that exists so `WHERE request_count > 0` can skip the join; surfacing
+  // both would put two fields with the same meaning in one --json object and
+  // invite a consumer to pick the one that can lag.
   total_cost_usd: number | null;
   total_duration_ms: number | null;
   total_api_duration_ms: number | null;
@@ -104,7 +108,7 @@ export function corpusTotals(db: Database, since: number | null = null): TokenTo
 export function resolveSessionId(db: Database, ref: string | null): string | null {
   if (!ref || ref === "--last" || ref === "last") {
     const row = db
-      .query("SELECT session_id FROM sessions WHERE message_count > 0 ORDER BY last_ts_ms DESC LIMIT 1")
+      .query("SELECT session_id FROM sessions WHERE request_count > 0 ORDER BY last_ts_ms DESC LIMIT 1")
       .get() as { session_id: string } | null;
     return row?.session_id ?? null;
   }
@@ -126,7 +130,7 @@ export function resolveSessionId(db: Database, ref: string | null): string | nul
 
 const SESSION_SELECT = `
   SELECT s.session_id, s.slug, s.project, s.cwd, s.git_branch, s.entrypoint,
-         s.first_ts, s.last_ts, s.message_count, s.total_cost_usd,
+         s.first_ts, s.last_ts, s.total_cost_usd,
          s.total_duration_ms, s.total_api_duration_ms, s.total_tool_duration_ms,
          s.total_lines_added, s.total_lines_removed,
          (SELECT GROUP_CONCAT(m, ', ') FROM

@@ -18,7 +18,7 @@ test("--last resolves to the most recently active session", () => {
   const id = resolveSessionId(db, null)!;
   expect(id).not.toBeNull();
   const newest = db
-    .query("SELECT session_id FROM sessions WHERE message_count > 0 ORDER BY last_ts_ms DESC LIMIT 1")
+    .query("SELECT session_id FROM sessions WHERE request_count > 0 ORDER BY last_ts_ms DESC LIMIT 1")
     .get() as { session_id: string };
   expect(id).toBe(newest.session_id);
 });

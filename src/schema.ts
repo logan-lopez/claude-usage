@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { paths } from "./paths.ts";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * Migrations are append-only. Index N runs when user_version < N + 1.
@@ -88,6 +88,8 @@ CREATE TABLE sessions (
   last_ts         TEXT,
   first_ts_ms     INTEGER,
   last_ts_ms      INTEGER,
+  -- Renamed to request_count in v2; it never counted messages. Shipped
+  -- migrations are never edited, so the misnomer stays here and nowhere else.
   message_count   INTEGER NOT NULL DEFAULT 0,
 
   -- cost-state roll-up. Present for roughly a third of sessions; the rest are
@@ -202,6 +204,18 @@ CREATE TABLE meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+`,
+  /* ---------------------------------------------------------------- v2 -- */ `
+-- message_count has never counted messages. It counts rows in 'requests',
+-- which are deduped assistant API requests: one user-visible reply can span
+-- several of them, streaming snapshots collapse into one, and user turns are
+-- not counted at all. On a session with 40 exchanges it reads ~120, which
+-- invites exactly the wrong conclusion in a tool whose entire job is to be
+-- believed about numbers. Rename rather than keep explaining it.
+--
+-- RENAME COLUMN rewrites the schema only, so every existing value carries
+-- over untouched and nothing has to be recomputed.
+ALTER TABLE sessions RENAME COLUMN message_count TO request_count;
 `,
 ];
 

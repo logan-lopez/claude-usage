@@ -77,7 +77,7 @@ test("renderSession says so when a session has no cost-state", () => {
   const db = freshDb();
   const row = db
     .query(`SELECT s.session_id FROM sessions s WHERE s.total_cost_usd IS NULL
-              AND s.message_count > 0 LIMIT 1`)
+              AND s.request_count > 0 LIMIT 1`)
     .get() as { session_id: string };
   const out = renderSession(getSession(db, row.session_id)!);
   expect(out).toContain("estimated");
