@@ -21,6 +21,15 @@ export const paths = {
   /** Source 3: the cached OAuth /api/oauth/usage response. Read, never written. */
   claudeJson: process.env.CUSAGE_CLAUDE_JSON ?? join(HOME, ".claude.json"),
 
+  /**
+   * Source 3b fallback only. On macOS the live token is in the login keychain
+   * (`Claude Code-credentials`) and this file is usually a stale leftover; it
+   * is read only when the keychain has nothing usable. The token is used to
+   * sign one request and is never written to the archive or to a log.
+   */
+  credentials:
+    process.env.CUSAGE_CREDENTIALS ?? join(HOME, ".claude/.credentials.json"),
+
   /** Source 4: desktop app's 15-minute longitudinal series, rolling 30-day cap. */
   desktopHistory:
     process.env.CUSAGE_DESKTOP_HISTORY ??

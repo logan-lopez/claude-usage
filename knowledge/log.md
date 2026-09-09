@@ -1,4 +1,10 @@
 ## 2026-09-09
+* **Update**: Linked `architecture/live-oauth-fetch-with-guard.md` to `findings/corpus-shape-2026-09-09.md` (The measurements that showed the cached snapshot was 27h stale and weekly_scoped is nowhere on disk).
+* **Update**: Updated concept `architecture/live-oauth-fetch-with-guard.md`.
+* **Update**: Linked `architecture/limits-reconciled-by-freshness.md` to `architecture/live-oauth-fetch-with-guard.md` (The live source that made an honest reconciliation possible).
+* **Update**: Updated concept `architecture/limits-reconciled-by-freshness.md`.
+* **Creation**: Documented concept `architecture/limits-reconciled-by-freshness.md` (Current limits are reconciled per meter by freshness, never taken from one source).
+* **Creation**: Documented concept `architecture/live-oauth-fetch-with-guard.md` (The no-network rule is replaced by one endpoint behind a 3-minute floor).
 * **Update**: Linked `architecture/independent-fixture-baseline.md` to `architecture/without-rowid-request-key.md` (The baseline is what proves the key design holds across full re-reads).
 * **Update**: Updated concept `architecture/independent-fixture-baseline.md`.
 * **Update**: Linked `architecture/grouped-cost-is-exact-or-absent.md` to `findings/corpus-shape-2026-09-09.md` (cost-state coverage and the cumulative-record trap that sets the ground truth).

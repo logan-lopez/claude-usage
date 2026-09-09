@@ -16,6 +16,11 @@ const env = (db: string) => ({
   CUSAGE_CLAUDE_JSON: `${FIXTURES}/claude.json`,
   CUSAGE_DESKTOP_HISTORY: `${FIXTURES}/plan-usage-history.json`,
   CUSAGE_GLAZE_HISTORY: `${FIXTURES}/glaze-usage-history.json`,
+  // The suite is offline, deliberately and permanently. `limits` and `sync`
+  // now refresh over the network by default, so every spawned CLI here pins
+  // that off -- a test that quietly depended on the endpoint being up, or on
+  // this machine holding a valid token, would be worthless.
+  CUSAGE_REFRESH: "off",
 });
 
 async function run(args: string[], db: string) {
@@ -46,6 +51,25 @@ test("parseArgs handles --flag value, --flag=value and bare flags", () => {
   });
   expect(parseArgs([]).command).toBe("help");
   expect(parseArgs(["session", "abc123"]).positional).toEqual(["abc123"]);
+});
+
+// A boolean flag used to swallow the next token, so `cusage --json status` set
+// json="status", found no command, printed the help and exited 0 -- a silent
+// wrong answer to a reasonable invocation. Only registered value flags consume
+// an argument now.
+test("a global flag before the command does not eat the command", () => {
+  expect(parseArgs(["--json", "status"])).toEqual({
+    command: "status", positional: [], flags: { json: true },
+  });
+  expect(parseArgs(["--no-color", "sessions", "--limit", "5"])).toEqual({
+    command: "sessions", positional: [], flags: { "no-color": true, limit: "5" },
+  });
+  expect(parseArgs(["limits", "--refresh"]).flags).toEqual({ refresh: true });
+  // An unregistered flag stays boolean and its argument becomes positional --
+  // visible, rather than silently absorbed.
+  expect(parseArgs(["limits", "--bogus", "x"])).toEqual({
+    command: "limits", positional: ["x"], flags: { bogus: true },
+  });
 });
 
 // Verification #10. The archiver runs hourly under launchd and the statusline
@@ -132,6 +156,77 @@ test("unknown commands exit non-zero with usage", async () => {
     const r = await run(["frobnicate"], db);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("unknown command");
+  });
+});
+
+test("a flag before the command reaches the command, end to end", async () => {
+  await withDb(async (db) => {
+    await run(["sync", "--limits-only"], db);
+    const r = await run(["--json", "status"], db);
+    expect(r.code).toBe(0);
+    expect(() => JSON.parse(r.stdout)).not.toThrow();
+    expect(r.stdout).not.toContain("cusage — Claude");
+  });
+});
+
+test("limits --history renders a series and survives an empty archive", async () => {
+  // Window derived from the fixture rather than written as `30d`: the fixture
+  // is frozen and the clock is not, so a relative window would start passing
+  // vacuously the month after it was recorded.
+  const samples = (await Bun.file(`${FIXTURES}/plan-usage-history.json`).json()).samples;
+  const since = new Date(samples[0].t - 60_000).toISOString();
+
+  await withDb(async (db) => {
+    await run(["sync", "--limits-only"], db);
+
+    const text = await run(["limits", "--history", "--since", since], db);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain("Limit history");
+    expect(text.stdout).toContain("seven_day");
+
+    const json = await run(["limits", "--history", "--since", since, "--json"], db);
+    const h = JSON.parse(json.stdout);
+    expect(h.buckets.length).toBeGreaterThan(10);
+    // The whole desktop series plus the one oauth-cache snapshot. Glaze days
+    // fall inside this window too and are excluded, which is the point of
+    // checking the source list rather than only the count.
+    expect(h.totalSamples).toBe(samples.length + 1);
+    expect(h.sources.map((s: { source: string }) => s.source).sort())
+      .toEqual(["desktop-history", "oauth-cache"]);
+    expect(json.stdout).not.toContain("\x1b[");
+  });
+
+  // No samples at all must render rather than divide by zero on an empty set.
+  await withDb(async (db) => {
+    const empty = await run(["limits", "--history"], db);
+    expect(empty.code).toBe(0);
+    expect(empty.stdout).toContain("Limit history");
+  });
+});
+
+test("bad input is a message and exit 2, not a stack trace", async () => {
+  await withDb(async (db) => {
+    await run(["sync", "--limits-only"], db);
+    for (const args of [["sessions", "--since", "7dd"], ["limits", "--history", "--bucket", "banana"]]) {
+      const r = await run(args, db);
+      expect(`${args[1]}:${r.code}`).toBe(`${args[1]}:2`);
+      expect(r.stderr).not.toContain("at <anonymous>");
+      expect(r.stderr.split("\n").filter(Boolean).length).toBeLessThan(3);
+    }
+  });
+});
+
+test("--no-refresh and $CUSAGE_REFRESH=off keep limits entirely local", async () => {
+  await withDb(async (db) => {
+    // env() already pins CUSAGE_REFRESH=off; --no-refresh is the explicit form
+    // and must not need it. Both must produce a usable view from the archive.
+    await run(["sync", "--limits-only"], db);
+    const r = await run(["limits", "--no-refresh", "--json"], db);
+    expect(r.code).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.refresh.attempted).toBe(false);
+    expect(out.refresh.reason).toBe("disabled");
+    expect(out.scoped.length).toBeGreaterThan(0);
   });
 });
 

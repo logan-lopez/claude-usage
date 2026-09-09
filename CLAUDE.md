@@ -55,12 +55,40 @@ the launchd agents have no install surface that can break. Adding one is a
 normal decision once it buys something real. The TUI phase adds `ink` and
 `react`, and that is expected.
 
-**No automatic network calls.** `cusage pricing --refresh` will be the only
-command that touches the network, and only when run by hand.
+**One endpoint, and a floor in front of it.** The original rule was "no
+automatic network calls, ever", and it was wrong for a specific reason worth
+remembering: `cachedUsageUtilization` refreshed *once* across a full day of
+heavy use, so `cusage limits` reported `Fable 53%` for 27 hours while the real
+figure was 74%. The rule was protecting a stale number.
+
+What replaced it is narrow, and each clause is load-bearing:
+
+- `GET https://api.anthropic.com/api/oauth/usage`, and no other host. `src/oauth.ts`
+  is the only file that may call `fetch`.
+- `MIN_REFRESH_MS` is a floor of 3 minutes between *attempts*, keyed on
+  attempts rather than successes so a 401 cannot be retried faster than a
+  success, and persisted in `meta` so it holds across processes. It is
+  `Math.max(180_000, env)` — config can raise it and cannot lower it, and
+  `--refresh` does not bypass it. `tests/refresh.test.ts` asserts this by
+  spawning a child with `CUSAGE_MIN_REFRESH_MS=1000`; keep that test.
+- Failures are soft. `refreshFromApi` never throws; a caller asking for limits
+  has a local archive and must print it.
+- The token is read, used once, and dropped. Never persisted, never logged,
+  and `redact()` is applied to anything that leaves the module.
+- The suite is offline. The one test that makes a real request points at
+  `127.0.0.1:1`, and `tests/cli.test.ts` pins `CUSAGE_REFRESH=off`.
+
+**Never present a stale number as current.** The corollary to "never present a
+derived number as fact", and the one the first version of `renderLimits`
+violated: it printed a bold `binding constraint: 53%` with no age. Every figure
+on that screen now carries its source and its age, and `currentLimits`
+reconciles per meter by freshness rather than reading one source. Two *current*
+sources that disagree produce a `disagreements` entry; nothing is ever averaged
+or interpolated.
 
 **Never ingest content.** Tool *names* and token *counts* only. No message
 bodies, no tool inputs or results, no prompts, and none of the identity keys in
-`~/.claude.json`.
+`~/.claude.json`. Credentials are read to sign one request, never stored.
 
 ## Fixtures
 
@@ -87,6 +115,13 @@ Two agents, installed by `scripts/install-agents.sh` from the templates in
 `launchd/`. Full `sync` hourly; `sync --limits-only` every 15 minutes — one job
 walks 240 MB, the other reads a cached JSON blob, and sampling a five-hour
 window once an hour is worse resolution than the desktop series being archived.
+
+The 15-minute agent is also what builds the `weekly_scoped` series, since that
+number exists in no local file and therefore has no history unless we fetch it
+on a schedule. Verified working under launchd: `security find-generic-password`
+reaches the login keychain from a LaunchAgent in the GUI session. If that ever
+changes, `fromKeychain` kills the subprocess after 5s rather than letting a job
+hang on a keychain dialog forever.
 
 `bun` is invoked by absolute path (`~/.bun/bin/bun`) because node lives behind
 an ephemeral fnm multishell path that launchd does not have.

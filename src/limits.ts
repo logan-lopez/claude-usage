@@ -1,13 +1,24 @@
 import type { Database } from "bun:sqlite";
 import { paths } from "./paths.ts";
+import { getMeta, setMeta } from "./schema.ts";
+import {
+  DEFAULT_STALE_MS, DEFAULT_TIMEOUT_MS, MIN_REFRESH_MS, fetchUsage, readToken,
+} from "./oauth.ts";
 
-export type LimitSource = "oauth-cache" | "desktop-history" | "glaze";
+/**
+ * Ordered by authority, freshest-wins ties broken in this order. 'glaze' is
+ * last for a reason beyond age: its metric is inferred and its granularity is
+ * a whole day, so it is archived but never reconciled from.
+ */
+export type LimitSource = "oauth-live" | "oauth-cache" | "desktop-history" | "glaze";
 
 export interface LimitsResult {
   oauthInserted: number;
   desktopInserted: number;
   glazeInserted: number;
+  /** Rows written to limit_scoped by this run. Was previously a table count. */
   scopedInserted: number;
+  refresh: RefreshOutcome;
 }
 
 const INSERT_SAMPLE = `
@@ -62,38 +73,32 @@ const str = (v: unknown): string | null =>
   typeof v === "string" && v !== "" ? v : null;
 
 /**
- * Source 3. Reads the cached OAuth response out of ~/.claude.json. Zero
- * network calls -- Claude Code already fetched it. Keyed on fetchedAtMs, so
- * polling every 15 minutes against an unchanged cache is a no-op rather than a
- * duplicate row.
+ * The `utilization` object is byte-identical whether it arrived over the wire
+ * or was read out of `cachedUsageUtilization` -- the cache is literally the
+ * response Claude Code stored. One writer for both, so the live source can
+ * never drift from the cached one in what it records.
  *
- * Reads exactly one key. oauthAccount, userID, machineID and
- * referral_code_details are never touched.
+ * Returns how many limit_scoped rows it wrote, which is the only count the
+ * caller cannot derive.
  */
-export async function snapshotOauthCache(
+export function recordUtilization(
   db: Database,
-  file: string = paths.claudeJson,
-): Promise<number> {
-  const f = Bun.file(file);
-  if (!(await f.exists())) return 0;
-  const cached = (await f.json())?.cachedUsageUtilization;
-  const u = cached?.utilization;
-  if (!u) return 0;
-
-  const fetchedAt = num(cached.fetchedAtMs) ?? Date.now();
+  u: any,
+  meta: { source: LimitSource; tsMs: number; accountUuid?: string | null },
+): number {
   const buckets: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(u)) {
     if (!NAMED_BUCKETS.has(k)) buckets[k] = v;
   }
-
   const xu = u.extra_usage ?? {};
   const spend = u.spend ?? {};
+  let scopedRows = 0;
 
   db.transaction(() => {
     db.prepare(INSERT_SAMPLE).run({
-      $ts_ms: fetchedAt, $source: "oauth-cache" satisfies LimitSource,
-      $account_uuid: str(cached.accountUuid), $org: null,
-      $fetched_at_ms: fetchedAt,
+      $ts_ms: meta.tsMs, $source: meta.source,
+      $account_uuid: str(meta.accountUuid), $org: null,
+      $fetched_at_ms: meta.tsMs,
       $fh: num(u.five_hour?.utilization),
       $fh_resets: str(u.five_hour?.resets_at),
       $sd: num(u.seven_day?.utilization),
@@ -112,7 +117,7 @@ export async function snapshotOauthCache(
     const scoped = db.prepare(INSERT_SCOPED);
     for (const l of Array.isArray(u.limits) ? u.limits : []) {
       scoped.run({
-        $ts_ms: fetchedAt, $source: "oauth-cache",
+        $ts_ms: meta.tsMs, $source: meta.source,
         $kind: str(l?.kind) ?? "", $group: str(l?.group) ?? "",
         // '' rather than NULL for the same reason request_id is: this is a
         // primary key column and NULLs would never collide.
@@ -120,10 +125,148 @@ export async function snapshotOauthCache(
         $percent: num(l?.percent), $severity: str(l?.severity),
         $resets_at: str(l?.resets_at), $is_active: l?.is_active ? 1 : 0,
       });
+      scopedRows++;
     }
   })();
 
+  return scopedRows;
+}
+
+/**
+ * Source 3. Reads the cached OAuth response out of ~/.claude.json. Zero
+ * network calls -- Claude Code already fetched it. Keyed on fetchedAtMs, so
+ * polling every 15 minutes against an unchanged cache is a no-op rather than a
+ * duplicate row.
+ *
+ * Still worth keeping now that we fetch our own: it is the only source of
+ * limit data for the hours before this tool existed, and it costs nothing.
+ * What it cannot be is the *current* number -- observed refresh interval on a
+ * heavy day was 27 hours, one distinct snapshot.
+ *
+ * Reads exactly one key. oauthAccount, userID, machineID and
+ * referral_code_details are never touched.
+ */
+export async function snapshotOauthCache(
+  db: Database,
+  file: string = paths.claudeJson,
+): Promise<number> {
+  const f = Bun.file(file);
+  if (!(await f.exists())) return 0;
+  const cached = (await f.json())?.cachedUsageUtilization;
+  const u = cached?.utilization;
+  if (!u) return 0;
+
+  recordUtilization(db, u, {
+    source: "oauth-cache",
+    tsMs: num(cached.fetchedAtMs) ?? Date.now(),
+    accountUuid: str(cached.accountUuid),
+  });
   return 1;
+}
+
+/* --------------------------------------------------------------- refresh -- */
+
+export type RefreshMode = "off" | "stale" | "force";
+
+/** Persisted so the floor holds across processes, not just within one. */
+const LAST_ATTEMPT_KEY = "oauth_live_last_attempt_ms";
+
+export interface RefreshOutcome {
+  mode: RefreshMode;
+  attempted: boolean;
+  ok: boolean;
+  /** Why nothing was fetched, or 'ok'. 'guard'/'fresh' are normal, not errors. */
+  reason: "disabled" | "fresh" | "guard" | "no-token" | "failed" | "ok";
+  /** Age of the newest oauth-live sample when the decision was taken. */
+  ageMs: number | null;
+  /** Milliseconds until the guard lifts, when reason is 'guard'. */
+  waitMs: number | null;
+  tsMs: number | null;
+  tokenSource: "keychain" | "file" | null;
+  httpStatus: number | null;
+  error: string | null;
+}
+
+function newestLiveMs(db: Database): number | null {
+  const row = db
+    .query("SELECT MAX(ts_ms) m FROM limit_samples WHERE source = 'oauth-live'")
+    .get() as { m: number | null } | null;
+  return row?.m ?? null;
+}
+
+/**
+ * Source 3a. One authenticated GET, then the same insert path as the cache.
+ *
+ * Two independent brakes, and they are not the same brake:
+ *
+ * - `staleMs` is the *policy*: don't bother if what we have is recent enough.
+ *   Callers set it, and `force` skips it.
+ * - `MIN_REFRESH_MS` is the *floor*: nothing gets through it, including
+ *   `force`, including a statusline in a loop. It is keyed on attempts rather
+ *   than successes so that a 401 or a dead network cannot be retried faster
+ *   than a success can.
+ *
+ * Never throws. A caller asking for limits has a perfectly good local archive
+ * to fall back on and should print it.
+ */
+export async function refreshFromApi(
+  db: Database,
+  opts: {
+    mode?: RefreshMode;
+    staleMs?: number;
+    timeoutMs?: number;
+    nowMs?: number;
+  } = {},
+): Promise<RefreshOutcome> {
+  const mode = opts.mode ?? "stale";
+  const now = opts.nowMs ?? Date.now();
+  const newest = newestLiveMs(db);
+  const ageMs = newest === null ? null : now - newest;
+  const base: RefreshOutcome = {
+    mode, attempted: false, ok: false, reason: "ok", ageMs, waitMs: null,
+    tsMs: newest, tokenSource: null, httpStatus: null, error: null,
+  };
+
+  if (mode === "off") return { ...base, reason: "disabled" };
+
+  const staleMs = opts.staleMs ?? DEFAULT_STALE_MS;
+  if (mode === "stale" && ageMs !== null && ageMs < staleMs) {
+    return { ...base, reason: "fresh" };
+  }
+
+  const lastAttempt = Number(getMeta(db, LAST_ATTEMPT_KEY)) || 0;
+  const sinceAttempt = now - lastAttempt;
+  if (sinceAttempt < MIN_REFRESH_MS) {
+    return { ...base, reason: "guard", waitMs: MIN_REFRESH_MS - sinceAttempt };
+  }
+
+  // Recorded before the request, not after: a hung fetch must still consume
+  // the interval, or a slow endpoint turns into a retry storm.
+  setMeta(db, LAST_ATTEMPT_KEY, String(now));
+
+  const token = await readToken({ nowMs: now });
+  if (!token) {
+    return {
+      ...base, attempted: true, reason: "no-token",
+      error: "no usable credentials in the login keychain or ~/.claude/.credentials.json",
+    };
+  }
+
+  const res = await fetchUsage(token, { timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS });
+  if (!res.ok || !res.utilization) {
+    return {
+      ...base, attempted: true, reason: "failed",
+      tokenSource: token.source, httpStatus: res.status, error: res.error,
+    };
+  }
+
+  // The response has no timestamp of its own, so ours is the receipt time.
+  const tsMs = Date.now();
+  recordUtilization(db, res.utilization, { source: "oauth-live", tsMs });
+  return {
+    ...base, attempted: true, ok: true, reason: "ok",
+    tsMs, tokenSource: token.source, httpStatus: res.status,
+  };
 }
 
 /**
@@ -134,18 +277,31 @@ export async function snapshotOauthCache(
 export async function backfillDesktopHistory(
   db: Database,
   file: string = paths.desktopHistory,
+  opts: { full?: boolean } = {},
 ): Promise<number> {
   const f = Bun.file(file);
   if (!(await f.exists())) return 0;
   const samples = (await f.json())?.samples;
   if (!Array.isArray(samples)) return 0;
 
+  // "Backfill" is a misnomer inherited from the first version: this is a
+  // continuous mirror that runs every 15 minutes. Rewriting all ~2,000 rows
+  // each time was cheap but pointless, so only the tail is considered. The
+  // one-hour overlap is not paranoia about clocks -- it covers the app
+  // rewriting the last few samples of the file, which it does.
+  const newest = (
+    db
+      .query("SELECT MAX(ts_ms) m FROM limit_samples WHERE source = 'desktop-history'")
+      .get() as { m: number | null } | null
+  )?.m ?? null;
+  const floor = opts.full || newest === null ? -Infinity : newest - 3_600_000;
+
   const stmt = db.prepare(INSERT_SAMPLE);
   let n = 0;
   db.transaction(() => {
     for (const s of samples) {
       const t = num(s?.t);
-      if (t === null) continue;
+      if (t === null || t <= floor) continue;
       stmt.run({
         $ts_ms: t, $source: "desktop-history" satisfies LimitSource,
         $account_uuid: null, $org: str(s.org), $fetched_at_ms: t,
@@ -171,11 +327,18 @@ export async function backfillDesktopHistory(
  * README says it is inferred.
  *
  * Timestamp is the UTC end of the named day, since the value is that day's
- * high-water mark rather than a reading at midnight.
+ * high-water mark rather than a reading at midnight -- except for the current
+ * day, which would otherwise sit in the future. A future-dated row is not a
+ * cosmetic problem: "newest limit sample across all sources" is exactly the
+ * query a status header wants, and it would return today's glaze row every
+ * time. Today's row is clamped to now and the stale copy at the old timestamp
+ * is deleted, so there is still exactly one row per day and the write stays
+ * idempotent.
  */
 export async function backfillGlazeHistory(
   db: Database,
   file: string = paths.glazeHistory,
+  nowMs: number = Date.now(),
 ): Promise<number> {
   const f = Bun.file(file);
   if (!(await f.exists())) return 0;
@@ -183,14 +346,22 @@ export async function backfillGlazeHistory(
   if (!map || typeof map !== "object") return 0;
 
   const stmt = db.prepare(INSERT_SAMPLE);
+  const dedupe = db.prepare(
+    `DELETE FROM limit_samples
+      WHERE source = 'glaze' AND ts_ms >= $lo AND ts_ms <= $hi AND ts_ms <> $keep`,
+  );
   let n = 0;
   db.transaction(() => {
     for (const [day, pct] of Object.entries<unknown>(map)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
       const v = num(pct);
       if (v === null) continue;
+      const dayStart = Date.parse(`${day}T00:00:00.000Z`);
+      const dayEnd = Date.parse(`${day}T23:59:59.999Z`);
+      const ts = Math.min(dayEnd, nowMs);
+      dedupe.run({ $lo: dayStart, $hi: dayEnd, $keep: ts });
       stmt.run({
-        $ts_ms: Date.parse(`${day}T23:59:59.999Z`), $source: "glaze" satisfies LimitSource,
+        $ts_ms: ts, $source: "glaze" satisfies LimitSource,
         $account_uuid: null, $org: null, $fetched_at_ms: null,
         $fh: v, $fh_resets: null, $sd: null, $sd_resets: null,
         $xu_pct: null, $xu_enabled: null, $xu_used: null, $xu_limit: null,
@@ -205,8 +376,17 @@ export async function backfillGlazeHistory(
 
 export async function syncLimits(
   db: Database,
-  opts: { backfill?: boolean } = {},
+  opts: { backfill?: boolean; refresh?: RefreshMode; staleMs?: number } = {},
 ): Promise<LimitsResult> {
+  const before = (
+    db.query("SELECT COUNT(*) c FROM limit_scoped").get() as { c: number }
+  ).c;
+
+  const refresh = await refreshFromApi(db, {
+    mode: opts.refresh ?? "stale",
+    staleMs: opts.staleMs,
+  });
+
   const oauthInserted = await snapshotOauthCache(db);
   let desktopInserted = 0;
   let glazeInserted = 0;
@@ -214,8 +394,13 @@ export async function syncLimits(
     desktopInserted = await backfillDesktopHistory(db);
     glazeInserted = await backfillGlazeHistory(db);
   }
-  const scopedInserted = (
+
+  const after = (
     db.query("SELECT COUNT(*) c FROM limit_scoped").get() as { c: number }
   ).c;
-  return { oauthInserted, desktopInserted, glazeInserted, scopedInserted };
+  return {
+    oauthInserted, desktopInserted, glazeInserted,
+    scopedInserted: after - before,
+    refresh,
+  };
 }

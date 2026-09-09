@@ -227,3 +227,27 @@ export function migrate(db: Database): void {
     })();
   }
 }
+
+// `limit_samples.source` and `limit_scoped.source` gained a fourth value,
+// 'oauth-live', after v1 shipped. No migration: source is a TEXT column, not
+// an enum, precisely so a new source costs nothing. The v1 comment inside
+// MIGRATIONS[0] still lists only the original three because shipped migrations
+// are never edited -- `LimitSource` in src/limits.ts is the current list.
+
+/**
+ * `meta` holds state about the *archiver* rather than about usage. It is
+ * deliberately not a module-level variable: the guard on network refreshes has
+ * to hold across separate `cusage` processes -- a launchd agent and a
+ * statusline poll are not the same process and must still share one clock.
+ */
+export function getMeta(db: Database, key: string): string | null {
+  const row = db.query("SELECT value FROM meta WHERE key = ?").get(key) as
+    | { value: string } | null;
+  return row?.value ?? null;
+}
+
+export function setMeta(db: Database, key: string, value: string): void {
+  db.query(
+    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = ?2",
+  ).run(key, value);
+}

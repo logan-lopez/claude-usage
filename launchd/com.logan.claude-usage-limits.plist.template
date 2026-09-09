@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Limits only, every 15 minutes. Reads one key out of ~/.claude.json and
-  re-archives the desktop app's rolling series. No transcript walk, no network.
+  Limits only, every 15 minutes. Reads one key out of ~/.claude.json,
+  re-archives the tail of the desktop app's rolling series, and makes one
+  authenticated GET to /api/oauth/usage when the last one is over 15 minutes
+  old.
+
+  That last part is the only scheduled network call in the tool, and it is here
+  rather than in the hourly agent for a reason: weekly_scoped -- the limit that
+  actually binds -- exists in no local file, and once an hour is too coarse to
+  be a series. A 3-minute floor in src/limits.ts applies regardless of how
+  often this fires; set CUSAGE_REFRESH=off below to make the agent purely
+  local again.
 
   Separate from the hourly agent because the two jobs have wildly different
   costs: one walks 240 MB, the other reads a cached JSON blob. Hourly is right

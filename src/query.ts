@@ -7,6 +7,9 @@
  * it and the layering is gone.
  */
 import type { Database } from "bun:sqlite";
+// Type-only: the read layer names the sources it reconciles, it does not write
+// them and must not reach the network module that produces one of them.
+import type { LimitSource } from "./limits.ts";
 
 export interface TokenTotals {
   requests: number;
@@ -298,45 +301,419 @@ export function groupSessions(
   });
 }
 
+/* ---------------------------------------------------------------- limits -- */
+
+/**
+ * Anything older than this is shown with its age spelled out rather than as a
+ * bare number. Matches the limits agent's interval, so a healthy machine never
+ * trips it. Not imported from oauth.ts on purpose: this module does no I/O and
+ * has no business knowing that a network exists.
+ */
+export const FRESH_MS = 900_000;
+
+/** Ties go to the more authoritative source. Glaze never wins because it never
+ *  competes -- see RECONCILABLE. */
+const SOURCE_RANK: Record<LimitSource, number> = {
+  "oauth-live": 3,
+  "oauth-cache": 2,
+  "desktop-history": 1,
+  glaze: 0,
+};
+
+/**
+ * Glaze is excluded from reconciliation, and not because it is stale. Its
+ * metric is inferred rather than labelled, and it is a daily high-water mark,
+ * so "the value right now" is not a thing it can answer.
+ */
+const RECONCILABLE: LimitSource[] = ["oauth-live", "oauth-cache", "desktop-history"];
+
+export interface LimitReading {
+  source: LimitSource;
+  tsMs: number;
+  ageMs: number;
+  percent: number | null;
+  resetsAt: string | null;
+}
+
+export interface SourceStatus {
+  source: LimitSource;
+  tsMs: number;
+  ageMs: number;
+  fiveHourPct: number | null;
+  sevenDayPct: number | null;
+  reconcilable: boolean;
+}
+
+export interface ScopedLimit {
+  kind: string;
+  group: string;
+  scope_model: string;
+  percent: number | null;
+  severity: string | null;
+  resets_at: string | null;
+  is_active: boolean;
+  source: LimitSource;
+  tsMs: number;
+  ageMs: number;
+}
+
+/** Two sources that are both current and disagree. Reported, never averaged. */
+export interface Disagreement {
+  metric: "five_hour" | "seven_day";
+  chosen: LimitReading;
+  other: LimitReading;
+  deltaPoints: number;
+}
+
 export interface LimitsNow {
-  fetchedAt: string | null;
+  nowMs: number;
+  freshMs: number;
+
+  /** Freshest usable reading per meter, whichever source it came from. */
+  fiveHour: LimitReading | null;
+  sevenDay: LimitReading | null;
+
+  /** Flat mirrors of the reconciled readings, for callers that want a number. */
   fiveHourPct: number | null;
   fiveHourResetsAt: string | null;
   sevenDayPct: number | null;
   sevenDayResetsAt: string | null;
-  scoped: {
-    kind: string; group: string; scope_model: string; percent: number | null;
-    severity: string | null; resets_at: string | null; is_active: boolean;
-  }[];
+  /** ISO time of the freshest reading actually used. Not "when we looked". */
+  fetchedAt: string | null;
+
+  scoped: ScopedLimit[];
+  scopedSource: LimitSource | null;
+  scopedTsMs: number | null;
+  scopedAgeMs: number | null;
+  scopedStale: boolean;
+  /** The limit that actually gates you, or null when nothing is marked active. */
+  binding: ScopedLimit | null;
+
+  disagreements: Disagreement[];
+  sources: SourceStatus[];
+
   extraUsagePct: number | null;
   spendPct: number | null;
   buckets: Record<string, unknown>;
 }
 
-export function currentLimits(db: Database): LimitsNow | null {
-  const s = db
+type MeterColumns = { pct: string; resets: string };
+const METERS: Record<"five_hour" | "seven_day", MeterColumns> = {
+  five_hour: { pct: "five_hour_pct", resets: "five_hour_resets_at" },
+  seven_day: { pct: "seven_day_pct", resets: "seven_day_resets_at" },
+};
+
+/** Newest row per source that actually carries this meter. A desktop sample
+ *  with a null `sd` must not shadow an older one that has it. */
+function readings(
+  db: Database,
+  meter: "five_hour" | "seven_day",
+  nowMs: number,
+): LimitReading[] {
+  const { pct, resets } = METERS[meter];
+  const out: LimitReading[] = [];
+  for (const source of RECONCILABLE) {
+    const row = db
+      .query(
+        `SELECT ts_ms, ${pct} AS pct, ${resets} AS resets
+           FROM limit_samples
+          WHERE source = ? AND ${pct} IS NOT NULL
+          ORDER BY ts_ms DESC LIMIT 1`,
+      )
+      .get(source) as { ts_ms: number; pct: number; resets: string | null } | null;
+    if (!row) continue;
+    out.push({
+      source,
+      tsMs: row.ts_ms,
+      ageMs: nowMs - row.ts_ms,
+      percent: row.pct,
+      resetsAt: row.resets,
+    });
+  }
+  return out;
+}
+
+const freshest = (rs: LimitReading[]): LimitReading | null =>
+  rs.reduce<LimitReading | null>(
+    (best, r) =>
+      best === null ||
+      r.tsMs > best.tsMs ||
+      (r.tsMs === best.tsMs && SOURCE_RANK[r.source] > SOURCE_RANK[best.source])
+        ? r
+        : best,
+    null,
+  );
+
+/**
+ * The current picture, reconciled across sources instead of taken from one.
+ *
+ * The previous version read `source = 'oauth-cache'` and nothing else, which
+ * is how `cusage limits` came to report a confident 37% weekly while the
+ * desktop series in the same database -- and the app on screen -- said 54%.
+ * The cache had not been refreshed in 27 hours. Both numbers were archived
+ * correctly; the query picked the wrong one and printed it without an age.
+ *
+ * So: every meter takes the freshest source that carries it, each reading
+ * keeps its provenance and age, and two current sources that disagree produce
+ * a `disagreements` entry rather than a silent winner. Nothing is averaged and
+ * nothing is interpolated -- every number here is a reading some source
+ * actually returned.
+ */
+export function currentLimits(
+  db: Database,
+  opts: { nowMs?: number; freshMs?: number } = {},
+): LimitsNow | null {
+  const nowMs = opts.nowMs ?? Date.now();
+  const freshMs = opts.freshMs ?? FRESH_MS;
+
+  const sources = (
+    db
+      .query(
+        `SELECT source, MAX(ts_ms) AS ts_ms FROM limit_samples GROUP BY source`,
+      )
+      .all() as { source: LimitSource; ts_ms: number }[]
+  )
+    .map((r) => {
+      const row = db
+        .query(
+          `SELECT five_hour_pct, seven_day_pct FROM limit_samples
+            WHERE source = ? AND ts_ms = ?`,
+        )
+        .get(r.source, r.ts_ms) as
+        | { five_hour_pct: number | null; seven_day_pct: number | null }
+        | null;
+      return {
+        source: r.source,
+        tsMs: r.ts_ms,
+        ageMs: nowMs - r.ts_ms,
+        fiveHourPct: row?.five_hour_pct ?? null,
+        sevenDayPct: row?.seven_day_pct ?? null,
+        reconcilable: RECONCILABLE.includes(r.source),
+      };
+    })
+    .sort((a, b) => b.tsMs - a.tsMs);
+
+  if (sources.length === 0) return null;
+
+  const fh = readings(db, "five_hour", nowMs);
+  const sd = readings(db, "seven_day", nowMs);
+  const fiveHour = freshest(fh);
+  const sevenDay = freshest(sd);
+
+  // Only current-vs-current counts. A 27-hour-old cache differing from a
+  // 4-minute-old reading is not a contradiction, it is just old, and the
+  // sources table already says so.
+  const disagreements: Disagreement[] = [];
+  for (const [metric, all, chosen] of [
+    ["five_hour", fh, fiveHour],
+    ["seven_day", sd, sevenDay],
+  ] as const) {
+    if (!chosen || chosen.percent === null || chosen.ageMs > freshMs) continue;
+    for (const other of all) {
+      if (other.source === chosen.source || other.percent === null) continue;
+      if (other.ageMs > freshMs) continue;
+      const delta = Math.abs(other.percent - chosen.percent);
+      if (delta > 2) disagreements.push({ metric, chosen, other, deltaPoints: delta });
+    }
+  }
+
+  // limits[] only ever comes from an OAuth response; the desktop series has no
+  // scoped breakdown at all, which is the entire reason the live fetch exists.
+  const head = db
     .query(
-      `SELECT * FROM limit_samples WHERE source = 'oauth-cache' ORDER BY ts_ms DESC LIMIT 1`,
+      `SELECT ts_ms, source FROM limit_scoped
+        WHERE source IN ('oauth-live', 'oauth-cache')
+        ORDER BY ts_ms DESC,
+                 CASE source WHEN 'oauth-live' THEN 1 ELSE 0 END DESC
+        LIMIT 1`,
+    )
+    .get() as { ts_ms: number; source: LimitSource } | null;
+
+  const scoped: ScopedLimit[] = head
+    ? (
+        db
+          .query(
+            `SELECT kind, group_name AS "group", scope_model, percent, severity,
+                    resets_at, is_active
+               FROM limit_scoped WHERE ts_ms = ? AND source = ?
+              ORDER BY is_active DESC, percent DESC`,
+          )
+          .all(head.ts_ms, head.source) as any[]
+      ).map((r) => ({
+        ...r,
+        is_active: !!r.is_active,
+        source: head.source,
+        tsMs: head.ts_ms,
+        ageMs: nowMs - head.ts_ms,
+      }))
+    : [];
+
+  // The sample carrying spend and the codename buckets. Desktop has neither.
+  const rich = db
+    .query(
+      `SELECT * FROM limit_samples
+        WHERE source IN ('oauth-live', 'oauth-cache')
+        ORDER BY ts_ms DESC LIMIT 1`,
     )
     .get() as any;
-  if (!s) return null;
-  const scoped = db
-    .query(
-      `SELECT kind, group_name AS "group", scope_model, percent, severity, resets_at, is_active
-         FROM limit_scoped WHERE ts_ms = ? AND source = 'oauth-cache'
-        ORDER BY is_active DESC, percent DESC`,
-    )
-    .all(s.ts_ms) as any[];
+
   return {
-    fetchedAt: new Date(s.ts_ms).toISOString(),
-    fiveHourPct: s.five_hour_pct,
-    fiveHourResetsAt: s.five_hour_resets_at,
-    sevenDayPct: s.seven_day_pct,
-    sevenDayResetsAt: s.seven_day_resets_at,
-    scoped: scoped.map((r) => ({ ...r, is_active: !!r.is_active })),
-    extraUsagePct: s.extra_usage_pct,
-    spendPct: s.spend_pct,
-    buckets: s.raw_buckets ? JSON.parse(s.raw_buckets) : {},
+    nowMs,
+    freshMs,
+    fiveHour,
+    sevenDay,
+    fiveHourPct: fiveHour?.percent ?? null,
+    fiveHourResetsAt: fiveHour?.resetsAt ?? null,
+    sevenDayPct: sevenDay?.percent ?? null,
+    sevenDayResetsAt: sevenDay?.resetsAt ?? null,
+    fetchedAt: (() => {
+      const ts = [fiveHour?.tsMs, sevenDay?.tsMs].filter((n): n is number => n !== undefined);
+      return ts.length ? new Date(Math.max(...ts)).toISOString() : null;
+    })(),
+    scoped,
+    scopedSource: head?.source ?? null,
+    scopedTsMs: head?.ts_ms ?? null,
+    scopedAgeMs: head ? nowMs - head.ts_ms : null,
+    scopedStale: head ? nowMs - head.ts_ms > freshMs : false,
+    binding: scoped.find((r) => r.is_active) ?? null,
+    disagreements,
+    sources,
+    extraUsagePct: rich?.extra_usage_pct ?? null,
+    spendPct: rich?.spend_pct ?? null,
+    buckets: rich?.raw_buckets ? JSON.parse(rich.raw_buckets) : {},
+  };
+}
+
+/* -------------------------------------------------------- limits history -- */
+
+export interface LimitBucket {
+  tsMs: number;
+  /** Peak within the bucket, not the mean. A limit you touched at 98% and
+   *  backed off from is a fact about your week; the average hides it. */
+  fiveHourPct: number | null;
+  sevenDayPct: number | null;
+  scopedPct: number | null;
+  samples: number;
+}
+
+export interface LimitsHistory {
+  since: number;
+  until: number;
+  bucketMs: number;
+  buckets: LimitBucket[];
+  /** Which model the weekly_scoped series belongs to, when there is one. */
+  scopedModel: string | null;
+  scopedSamples: number;
+  totalSamples: number;
+  sources: { source: LimitSource; samples: number; firstTsMs: number; lastTsMs: number }[];
+}
+
+/** Bucket widths that read sensibly on a clock. */
+const BUCKET_LADDER = [
+  5 * 60_000, 15 * 60_000, 30 * 60_000, 3_600_000, 2 * 3_600_000,
+  3 * 3_600_000, 6 * 3_600_000, 12 * 3_600_000, 86_400_000,
+];
+
+/** Keep the series renderable in a terminal: ~120 columns of history. */
+export function chooseBucket(spanMs: number, target = 120): number {
+  const ideal = Math.max(1, spanMs / target);
+  return BUCKET_LADDER.find((b) => b >= ideal) ?? BUCKET_LADDER[BUCKET_LADDER.length - 1]!;
+}
+
+/**
+ * The longitudinal view. `desktop-history` alone is ~2,000 samples at a
+ * 15-minute cadence over a rolling 30 days, and until now nothing queried it.
+ *
+ * Empty buckets are emitted as nulls rather than skipped, so position in the
+ * array is proportional to time. A sparkline that silently closes gaps turns
+ * an outage into a smooth line.
+ *
+ * Glaze is excluded by default: one inferred value per day would otherwise
+ * spike a five-hour series that is sampled every 15 minutes.
+ */
+export function limitsHistory(
+  db: Database,
+  opts: {
+    since?: number | null;
+    until?: number | null;
+    bucketMs?: number | null;
+    includeGlaze?: boolean;
+    nowMs?: number;
+  } = {},
+): LimitsHistory {
+  const nowMs = opts.nowMs ?? Date.now();
+  const until = opts.until ?? nowMs;
+  const since = opts.since ?? until - 7 * 86_400_000;
+  const bucketMs = opts.bucketMs ?? chooseBucket(Math.max(until - since, 60_000));
+  const glaze = opts.includeGlaze === true;
+
+  const rows = db
+    .query(
+      `SELECT (ts_ms / $b) * $b AS bucket,
+              MAX(five_hour_pct) AS fh,
+              MAX(seven_day_pct) AS sd,
+              COUNT(*) AS n
+         FROM limit_samples
+        WHERE ts_ms >= $since AND ts_ms <= $until
+          AND ($glaze = 1 OR source <> 'glaze')
+        GROUP BY bucket`,
+    )
+    .all({ $b: bucketMs, $since: since, $until: until, $glaze: glaze ? 1 : 0 }) as {
+      bucket: number; fh: number | null; sd: number | null; n: number;
+    }[];
+
+  const scopedRows = db
+    .query(
+      `SELECT (ts_ms / $b) * $b AS bucket, MAX(percent) AS p
+         FROM limit_scoped
+        WHERE kind = 'weekly_scoped' AND ts_ms >= $since AND ts_ms <= $until
+        GROUP BY bucket`,
+    )
+    .all({ $b: bucketMs, $since: since, $until: until }) as
+      { bucket: number; p: number | null }[];
+
+  const byBucket = new Map(rows.map((r) => [r.bucket, r]));
+  const scopedByBucket = new Map(scopedRows.map((r) => [r.bucket, r.p]));
+
+  const first = Math.floor(since / bucketMs) * bucketMs;
+  const last = Math.floor(until / bucketMs) * bucketMs;
+  const buckets: LimitBucket[] = [];
+  for (let t = first; t <= last; t += bucketMs) {
+    const r = byBucket.get(t);
+    buckets.push({
+      tsMs: t,
+      fiveHourPct: r?.fh ?? null,
+      sevenDayPct: r?.sd ?? null,
+      scopedPct: scopedByBucket.get(t) ?? null,
+      samples: r?.n ?? 0,
+    });
+  }
+
+  const scopedMeta = db
+    .query(
+      `SELECT scope_model, COUNT(*) AS n FROM limit_scoped
+        WHERE kind = 'weekly_scoped' AND ts_ms >= $since AND ts_ms <= $until
+        GROUP BY scope_model ORDER BY n DESC LIMIT 1`,
+    )
+    .get({ $since: since, $until: until }) as { scope_model: string; n: number } | null;
+
+  const sources = db
+    .query(
+      `SELECT source, COUNT(*) AS samples, MIN(ts_ms) AS firstTsMs, MAX(ts_ms) AS lastTsMs
+         FROM limit_samples
+        WHERE ts_ms >= $since AND ts_ms <= $until
+          AND ($glaze = 1 OR source <> 'glaze')
+        GROUP BY source ORDER BY lastTsMs DESC`,
+    )
+    .all({ $since: since, $until: until, $glaze: glaze ? 1 : 0 }) as
+      LimitsHistory["sources"];
+
+  return {
+    since, until, bucketMs, buckets,
+    scopedModel: scopedMeta?.scope_model || null,
+    scopedSamples: scopedMeta?.n ?? 0,
+    totalSamples: rows.reduce((a, r) => a + r.n, 0),
+    sources,
   };
 }
 

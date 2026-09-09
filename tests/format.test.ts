@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
-import { num, renderGroups, renderLimits, renderSession, renderSessions, setColour, table, truncate, usd } from "../src/format.ts";
-import { getSession, groupSessions, listSessions, resolveSessionId } from "../src/query.ts";
-import { freshDb } from "./helpers.ts";
+import {
+  num, renderGroups, renderLimits, renderLimitsHistory, renderSession, renderSessions,
+  setColour, sparkline, table, truncate, usd,
+} from "../src/format.ts";
+import {
+  currentLimits, getSession, groupSessions, limitsHistory, listSessions, resolveSessionId,
+} from "../src/query.ts";
+import { snapshotOauthCache } from "../src/limits.ts";
+import { openDb } from "../src/schema.ts";
+import { FIXTURES, freshDb } from "./helpers.ts";
 
 setColour(false);
 
@@ -82,6 +89,74 @@ test("renderSessions and renderLimits produce one header plus rows", () => {
   const rows = listSessions(db, { limit: 5 });
   expect(renderSessions(rows).split("\n")).toHaveLength(rows.length + 1);
   expect(renderLimits(null)).toContain("--limits-only");
+});
+
+// The corollary to "never present a derived number as fact" that the first
+// version missed: never present a stale number as current. A bold binding
+// constraint with no age, when the true figure had moved 53 -> 74, is the
+// single most misleading thing this tool could print.
+test("renderLimits never presents a stale number as current", async () => {
+  const db = openDb(":memory:");
+  await snapshotOauthCache(db, `${FIXTURES}/claude.json`);
+  const cacheAt = (await Bun.file(`${FIXTURES}/claude.json`).json())
+    .cachedUsageUtilization.fetchedAtMs;
+
+  const stale = renderLimits(currentLimits(db, { nowMs: cacheAt + 27.5 * 3_600_000 }));
+  expect(stale).toContain("27h");
+  expect(stale).toContain("may be out of date");
+  expect(stale).toContain("--refresh");
+
+  const fresh = renderLimits(currentLimits(db, { nowMs: cacheAt + 120_000 }));
+  expect(fresh).toContain("binding constraint");
+  expect(fresh).not.toContain("may be out of date");
+  // Provenance is on the screen either way, not only when something is wrong.
+  expect(fresh).toContain("oauth-cache");
+});
+
+test("renderLimits shows both sides when current sources disagree", () => {
+  const db = openDb(":memory:");
+  const nowMs = Date.parse("2026-09-09T21:00:00Z");
+  const add = (src: string, ago: number, fh: number, sd: number) =>
+    db.query(
+      `INSERT INTO limit_samples (ts_ms, source, five_hour_pct, seven_day_pct)
+       VALUES (?, ?, ?, ?)`,
+    ).run(nowMs - ago, src, fh, sd);
+  add("oauth-live", 4 * 60_000, 10, 40);
+  add("desktop-history", 60_000, 10, 54);
+
+  const out = renderLimits(currentLimits(db, { nowMs }));
+  expect(out).toContain("sources disagree");
+  expect(out).toContain("54%");
+  expect(out).toContain("40%");
+  expect(out).toContain("neither is averaged");
+});
+
+test("a sparkline distinguishes no sample from zero", () => {
+  expect(sparkline([0, 100])).toBe("▁█");
+  expect(sparkline([null])).toBe("·");
+  // The bug this prevents: rendering a gap as ▁ turns an outage into a
+  // convincing flat line at zero usage.
+  expect(sparkline([null])).not.toBe(sparkline([0]));
+  expect(sparkline([50]).length).toBe(1);
+  expect(sparkline([])).toBe("");
+});
+
+test("renderLimitsHistory says the scoped series is missing rather than flat", () => {
+  const db = openDb(":memory:");
+  const base = Date.parse("2026-09-08T00:00:00Z");
+  for (let i = 0; i < 10; i++) {
+    db.query(
+      `INSERT INTO limit_samples (ts_ms, source, five_hour_pct, seven_day_pct)
+       VALUES (?, 'desktop-history', ?, ?)`,
+    ).run(base + i * 3_600_000, i * 10, 40 + i);
+  }
+  const out = renderLimitsHistory(
+    limitsHistory(db, { since: base, until: base + 10 * 3_600_000, bucketMs: 3_600_000 }),
+  );
+  expect(out).toContain("Limit history");
+  expect(out).toContain("seven_day");
+  expect(out).toContain("no weekly_scoped samples");
+  expect(out).toContain("daily peaks");
 });
 
 test("rendering never mutates its input", () => {
