@@ -134,7 +134,7 @@ scoped to a single model, and higher:
 ## Testing
 
 ```bash
-bun test          # 49 tests, no network, no live data
+bun test          # 50 tests, no network, no live data
 bun run fixture   # regenerate fixtures/ from the live corpus
 bunx tsc --noEmit
 ```

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { num, renderGroups, renderLimits, renderSession, renderSessions, setColour, table, usd } from "../src/format.ts";
+import { num, renderGroups, renderLimits, renderSession, renderSessions, setColour, table, truncate, usd } from "../src/format.ts";
 import { getSession, groupSessions, listSessions, resolveSessionId } from "../src/query.ts";
 import { freshDb } from "./helpers.ts";
 
@@ -33,6 +33,18 @@ test("table aligns columns and handles an empty set", () => {
   expect(lines[1]!).toBe("x          1");
   expect(lines[2]!).toBe("longer  4200");
   expect(table([], [{ header: "a", get: () => "" }])).toContain("(none)");
+});
+
+test("one long key does not blow out the whole table", () => {
+  // Real project names reach 84 characters, which padded every other column to
+  // match and made the view unreadable.
+  expect(truncate("short", 10)).toBe("short");
+  expect(truncate("x".repeat(50), 10)).toHaveLength(10);
+  const rows = groupSessions(freshDb(), "project").map((r) => ({ ...r, key: "p".repeat(120) }));
+  // Only the table itself; the trailing note is prose and wraps in the terminal.
+  const table = renderGroups(rows, "project").split("\n\n")[0]!.split("\n");
+  expect(table.length).toBeGreaterThan(1);
+  for (const line of table) expect(line.length).toBeLessThan(120);
 });
 
 test("renderGroups marks an incomplete cost column and explains why", () => {

@@ -37,6 +37,12 @@ export function usd(n: number | null | undefined): string {
 /** Width-aware only for the plain ASCII these views emit. */
 const visibleLen = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").length;
 
+/** One long key must not blow out every column. Real project names reach 84
+ *  characters -- conductor worktrees are named after the issue title. */
+export function truncate(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
+}
+
 export interface Column<T> {
   header: string;
   get: (row: T) => string;
@@ -164,8 +170,8 @@ export function renderSessions(rows: SessionRow[]): string {
   return table(rows, [
     { header: "when", get: (r) => fmtWhen(r.last_ts) },
     { header: "session", get: (r) => r.session_id.slice(0, 8) },
-    { header: "slug", get: (r) => (r.slug ?? "-").slice(0, 34) },
-    { header: "project", get: (r) => (r.project ?? "-").slice(0, 22) },
+    { header: "slug", get: (r) => truncate(r.slug ?? "-", 34) },
+    { header: "project", get: (r) => truncate(r.project ?? "-", 24) },
     { header: "req", get: (r) => num(r.requests), align: "right" },
     { header: "out", get: (r) => num(r.output_tokens), align: "right" },
     { header: "cache r", get: (r) => num(r.cache_read_tokens), align: "right" },
@@ -176,7 +182,7 @@ export function renderSessions(rows: SessionRow[]): string {
 
 export function renderGroups(rows: GroupRow[], label: string): string {
   const body = table(rows, [
-    { header: label, get: (r) => r.key },
+    { header: label, get: (r) => truncate(r.key, 40) },
     { header: "sess", get: (r) => String(r.sessions), align: "right" },
     ...(TOKEN_COLS as Column<GroupRow>[]),
     {
