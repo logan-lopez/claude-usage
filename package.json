@@ -1,6 +1,6 @@
 {
   "name": "claude-usage",
-  "module": "index.ts",
+  "module": "src/cli.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -8,5 +8,15 @@
   },
   "peerDependencies": {
     "typescript": "^7.0.2"
+  },
+  "bin": {
+    "cusage": "src/cli.ts",
+    "cusage-tui": "src/tui.ts"
+  },
+  "scripts": {
+    "sync": "bun run src/cli.ts sync",
+    "fixture": "bun run tools/make-fixture.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
   }
 }
