@@ -1,0 +1,124 @@
+{
+  "note": "Computed by tools/make-fixture.ts with an independent dedup implementation. tests/ assert src/ingest.ts reproduces these exactly.",
+  "rawAssistantRecords": 738,
+  "requests": 394,
+  "dedupRatio": 1.8731,
+  "noRequestIdRows": 52,
+  "toolCalls": 443,
+  "sessions": 20,
+  "sessionsWithCostState": 3,
+  "costStateModelRows": 6,
+  "costStateTotalUSD": 90.382758,
+  "tokens": {
+    "input_tokens": 15835,
+    "output_tokens": 479295,
+    "thinking_tokens": 179472,
+    "cache_creation_tokens": 2088272,
+    "cache_read_tokens": 74987083,
+    "ephemeral_5m": 814835,
+    "ephemeral_1h": 1273437,
+    "total_tokens": 77570485
+  },
+  "perSession": {
+    "00000001-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 0,
+      "total_tokens": 0
+    },
+    "00000002-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 0,
+      "total_tokens": 0
+    },
+    "00000003-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 0,
+      "total_tokens": 0
+    },
+    "00000004-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 290,
+      "total_tokens": 542
+    },
+    "00000005-5e55-4000-8000-000000000000": {
+      "requests": 113,
+      "output_tokens": 98375,
+      "total_tokens": 20185464
+    },
+    "00000006-5e55-4000-8000-000000000000": {
+      "requests": 47,
+      "output_tokens": 48939,
+      "total_tokens": 6644411
+    },
+    "00000007-5e55-4000-8000-000000000000": {
+      "requests": 2,
+      "output_tokens": 4,
+      "total_tokens": 72854
+    },
+    "00000008-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 3,
+      "total_tokens": 26788
+    },
+    "00000009-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 3,
+      "total_tokens": 26788
+    },
+    "0000000a-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 8,
+      "total_tokens": 26786
+    },
+    "0000000b-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 3,
+      "total_tokens": 26788
+    },
+    "0000000c-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 1,
+      "total_tokens": 36360
+    },
+    "0000000d-5e55-4000-8000-000000000000": {
+      "requests": 3,
+      "output_tokens": 6,
+      "total_tokens": 80577
+    },
+    "0000000e-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 2,
+      "total_tokens": 26788
+    },
+    "0000000f-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 3,
+      "total_tokens": 26788
+    },
+    "00000010-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 1,
+      "total_tokens": 36360
+    },
+    "00000011-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 0,
+      "total_tokens": 0
+    },
+    "00000012-5e55-4000-8000-000000000000": {
+      "requests": 214,
+      "output_tokens": 331653,
+      "total_tokens": 50312131
+    },
+    "00000013-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 2,
+      "total_tokens": 20530
+    },
+    "00000014-5e55-4000-8000-000000000000": {
+      "requests": 1,
+      "output_tokens": 2,
+      "total_tokens": 20530
+    }
+  }
+}

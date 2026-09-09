@@ -32,3 +32,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# local scratch archives used while developing; the real one lives at
+# ~/.local/share/claude-usage/usage.db and is never inside the repo
+.data
+*.db
+*.db-wal
+*.db-shm

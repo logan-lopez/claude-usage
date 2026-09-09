@@ -1,0 +1,4 @@
+# Architecture
+* [requests is WITHOUT ROWID with request_id stored as empty string](without-rowid-request-key.md) - The requests table is declared WITHOUT ROWID and stores '' rather than NULL for absent request ids, because a rowid table's nullable primary key would silently re-insert every requestId-less record on each sync.
+* [Grouped cost excludes sessions that straddle groups rather than double-counting them](grouped-cost-is-exact-or-absent.md) - Because cost-state is recorded per session and one session's requests can span several projects or models, grouped views sum cost only for sessions wholly inside a group and report the straddlers separately.
+* [Test baselines are computed by a second, independent dedup implementation](independent-fixture-baseline.md) - fixtures/BASELINE.json is produced by a separate plain-JavaScript reducer inside tools/make-fixture.ts, so the tests compare two implementations of the dedup rule instead of the ingester against itself.

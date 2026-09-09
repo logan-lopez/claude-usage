@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Limits only, every 15 minutes. Reads one key out of ~/.claude.json and
+  re-archives the desktop app's rolling series. No transcript walk, no network.
+
+  Separate from the hourly agent because the two jobs have wildly different
+  costs: one walks 240 MB, the other reads a cached JSON blob. Hourly is right
+  for the first and far too coarse for the second -- sampling a five-hour
+  window once an hour is worse resolution than the desktop series this is
+  archiving in the first place.
+
+  Rendered from this template by scripts/install-agents.sh; {{REPO}} and
+  {{HOME}} are substituted there. Do not install this file directly.
+
+  bun is invoked by absolute path on purpose. node lives behind an fnm
+  multishell path that changes every shell, which launchd does not have.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.logan.claude-usage-limits</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{HOME}}/.bun/bin/bun</string>
+    <string>run</string>
+    <string>{{REPO}}/src/cli.ts</string>
+    <string>sync</string>
+    <string>--limits-only</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>{{REPO}}</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>{{HOME}}</string>
+    <key>PATH</key>
+    <string>{{HOME}}/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Nothing here is urgent and the first run reads 240 MB. Stay out of the
+       way of whatever is actually using the machine. -->
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>Nice</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>{{HOME}}/Library/Logs/claude-usage/limits.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{HOME}}/Library/Logs/claude-usage/limits.log</string>
+</dict>
+</plist>
