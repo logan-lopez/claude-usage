@@ -1,4 +1,5 @@
 ## 2026-09-10
+* **Update**: Updated concept `architecture/cli-reports-and-binary-install.md` (estimator errors scored over fully priced sessions only; statusline drops cost for tokens; schema v3 join indexes for tool attribution).
 * **Update**: Updated concept `architecture/grouped-cost-is-exact-or-absent.md`.
 * **Creation**: Documented concept `architecture/cli-reports-and-binary-install.md` (CLI reports preserve provenance and install as standalone binaries).
 * **Update**: Updated concept `architecture/live-oauth-fetch-with-guard.md`.

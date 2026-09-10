@@ -112,9 +112,21 @@ test("frozen aggregate calibration reports error distribution without fitting ra
     expect(audit.zeroCostSessions).toBe(59);
     expect(audit.measured).toBeCloseTo(752.04845015, 6);
     expect(audit.estimated).toBeCloseTo(500.15662315, 6);
-    expect(audit.median!).toBeLessThan(0.23);
-    expect(audit.p90!).toBeLessThanOrEqual(1);
-    expect(audit.worst!).toBeLessThan(2);
+    // Scored over fully-priced sessions only. Pooling declined sessions in put
+    // 37 of them at exactly 1.0 and pinned p90 to 100%, which no improvement to
+    // the estimator could ever have moved. These bounds can fail.
+    expect(audit.priced.sessions).toBe(61);
+    expect(audit.priced.median!).toBeLessThan(0.19);
+    expect(audit.priced.p90!).toBeLessThan(0.28);
+    expect(audit.priced.worst!).toBeLessThan(0.8);
+    expect(audit.priced.estimated).toBeCloseTo(413.4963286, 6);
+    expect(audit.priced.measured).toBeCloseTo(487.72388835, 6);
+    // Nothing scored may contain an absence, and every session lands in
+    // exactly one bucket.
+    expect(audit.priced.sessions + audit.declined.sessions).toBe(audit.sessions);
+    expect(audit.declined.sessions).toBe(105);
+    expect(audit.declined.sessionsWithNoRequests).toBe(64);
+    expect(audit.declined.unpricedRequests).toBeGreaterThan(0);
     expect(audit.rows.some((r) => r.unpricedRequests > 0)).toBe(true);
   } finally {
     db.close();

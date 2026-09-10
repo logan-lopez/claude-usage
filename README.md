@@ -313,20 +313,34 @@ with `bun run tools/make-pricing-calibration.ts`; ordinary tests never read live
 | Audit measure | Frozen result |
 |---|---:|
 | Measured sessions | 166 |
-| Positive-dollar sessions (percentage-error denominator) | 107 |
-| Zero-dollar sessions (relative error undefined) | 59 |
 | Measured total | $752.04845015 |
 | Known-rate estimated subtotal | $500.15662315 |
-| Median absolute relative error | 21.73% |
-| p90 absolute relative error | 100.00% |
-| Worst absolute relative error | 193.99% |
+| **Scored sessions** (every request priced, positive measured cost) | **61** |
+| Their measured total | $487.72388835 |
+| Their estimated total | $413.49632860 |
+| Median absolute relative error | 18.21% |
+| p90 absolute relative error | 26.58% |
+| Worst absolute relative error | 78.36% |
+| **Declined sessions** (nothing to price, or a request refused a rate) | **105** |
+| Their measured total | $264.32456180 |
+| — of those, sessions with no ingested requests | 64 |
 
 Errors compare each session's known-rate subtotal with cumulative measured
-cost. Unpriceable `[1m]` and unknown-model amounts are omitted from that subtotal,
-so these are **not accuracy claims for a complete estimator**. Forty positive-cost
-sessions have unpriced requests. Zero-dollar sessions remain in the aggregate
-but cannot supply percentage errors. The offline suite fixes the dollar totals
-and asserts median <23%, p90 <=100%, worst <200%, without fitting any rates.
+cost, and are computed over **scored sessions only**. That split is the point.
+A session whose every request is `[1m]` or an unknown model estimates to $0 and
+scores a relative error of exactly 1.0 — which is not a 100% estimation error,
+it is an absence graded as a wrong answer. Pooling the two buckets put 37
+sessions at exactly 1.0 and pinned p90 to 100.00%, a figure no improvement to
+the estimator could ever have moved. The declined bucket is reported beside the
+distribution, in dollars, so the hole stays visible.
+
+These are still **not accuracy claims for a complete estimator**: $264.32 of
+measured spend has no comparable estimate at all. Within the sessions that can
+be scored, the estimate runs about **15% low in aggregate** ($413.50 against
+$487.72), which is a real signal and not yet explained — `ephemeral_1h` cache
+creation being priced at the 5-minute multiplier is the first suspect. The
+offline suite fixes the dollar totals and asserts median <19%, p90 <28%,
+worst <80%, without fitting any rates.
 
 ### Observed meter cycles
 
@@ -346,9 +360,13 @@ columns are context alongside the server meter, not a causal explanation.
 ### Operations
 
 `statusline` returns one archived line immediately, with per-meter source/age
-and separate measured/estimated UTC-today subtotals. Missing, stale, tier-unknown
-and partial costs stay labelled. A short-lived background CLI refreshes stale
-limits; it never delays the line for keychain/network. The SQLite attempt claim
+and UTC-today token and request counts. It carries **no dollar figure by
+design**: `cost --by day` correctly excludes any session straddling midnight,
+which is nearly always the session in progress, so a cost here would read
+$0.00 for most of the day. Tokens need no attribution or price table and are
+exact. Cost lives in `cusage cost`, where the exclusions are on screen. A
+short-lived background CLI refreshes stale limits; it never delays the line for
+keychain/network. The SQLite attempt claim
 is atomic across processes, and the same three-minute floor applies. Use
 `--no-refresh` or `CUSAGE_REFRESH=off` to disable the worker.
 

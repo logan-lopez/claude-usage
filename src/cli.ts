@@ -193,18 +193,19 @@ async function main(argv: string[]): Promise<number> {
     process.stderr.write(`${(e as Error).message}\n`);
     return 2;
   }
-  const json = flags.json === true || flags.json === "true";
+  const json = flags.json === true;
   const csv = flags.csv === true;
-  const f =
-    !json && !csv && command !== "export" ? await import("./format.ts") : null!;
-  if (f)
-    f.setColour(
-      !csv &&
-        !json &&
-        flags["no-color"] !== true &&
-        Bun.stdout.writer !== undefined &&
-        process.stdout.isTTY === true,
-    );
+  // Machine output never loads the formatter, so `format` is genuinely null on
+  // those paths. `emit` hands it to the renderer instead of letting twelve call
+  // sites assert it away, which keeps the one assumption in one place.
+  type Formatter = typeof import("./format.ts");
+  const format: Formatter | null =
+    !json && !csv && command !== "export" ? await import("./format.ts") : null;
+  format?.setColour(
+    flags["no-color"] !== true &&
+      Bun.stdout.writer !== undefined &&
+      process.stdout.isTTY === true,
+  );
 
   if (command === "help" || flags.help === true) {
     program.outputHelp();
@@ -221,13 +222,13 @@ async function main(argv: string[]): Promise<number> {
     process.stderr.write(`cannot open archive: ${(e as Error).message}\n`);
     return 2;
   }
-  const emit = (data: unknown, text: () => string) => {
+  const emit = (data: unknown, text: (f: Formatter) => string) => {
     process.stdout.write(
       json
         ? JSON.stringify(data, null, 2) + "\n"
         : csv
           ? reportCsv(data)
-          : text(),
+          : text(format!),
     );
   };
   /** Operational asides go to stderr so `--json` stays parseable. */
@@ -246,7 +247,7 @@ async function main(argv: string[]): Promise<number> {
         note(
           limits.refresh.reason === "failed"
             ? `could not refresh: ${limits.refresh.error}. Showing archived data.`
-            : (f?.renderRefreshNote(limits.refresh) ?? null),
+            : (format?.renderRefreshNote(limits.refresh) ?? null),
         );
         const ingest = limitsOnly
           ? null
@@ -257,7 +258,7 @@ async function main(argv: string[]): Promise<number> {
           limits,
           ingest,
         };
-        emit(result, () => {
+        emit(result, (f) => {
           const lines = [`archive: ${result.db}`];
           if (ingest) {
             lines.push(
@@ -304,23 +305,20 @@ async function main(argv: string[]): Promise<number> {
           process.stderr.write("no matching session\n");
           return 1;
         }
-        emit(detail, () => f.renderSession(detail));
+        emit(detail, (f) => f.renderSession(detail));
         return 0;
       }
 
       case "sessions": {
+        // No allowlist here: byOption() rejected anything outside the set
+        // before the archive was even opened, and a second copy of the list is
+        // exactly the drift the commander migration was meant to end.
         const by = str(flags.by) as q.SessionsOptions["by"];
         if (by) {
-          if (!["project", "model", "entrypoint", "branch"].includes(by)) {
-            process.stderr.write(
-              `--by must be project|model|entrypoint|branch\n`,
-            );
-            return 2;
-          }
           const data = q.sessionGroupsReport(db, by, window);
           emit(
             data,
-            () =>
+            (f) =>
               f.renderGroups(data.rows, by, data.coverage) +
               `\n${data.rows.length} of ${data.groups} groups shown · ${data.source}\n`,
           );
@@ -330,7 +328,7 @@ async function main(argv: string[]): Promise<number> {
           ...window,
           limit: window.limit ?? 30,
         });
-        emit(rows, () => f.renderSessions(rows) + "\n");
+        emit(rows, (f) => f.renderSessions(rows) + "\n");
         return 0;
       }
 
@@ -343,7 +341,7 @@ async function main(argv: string[]): Promise<number> {
         note(
           refresh.reason === "failed"
             ? `could not refresh: ${refresh.error}. Showing archived data.`
-            : (f?.renderRefreshNote(refresh) ?? null),
+            : (format?.renderRefreshNote(refresh) ?? null),
         );
 
         if (flags.history === true) {
@@ -361,12 +359,12 @@ async function main(argv: string[]): Promise<number> {
             until: window.until,
             includeGlaze: flags.glaze === true,
           });
-          emit(history, () => f.renderLimitsHistory(history));
+          emit(history, (f) => f.renderLimitsHistory(history));
           return 0;
         }
 
         const now = q.currentLimits(db);
-        emit({ ...(now ?? {}), refresh }, () => f.renderLimits(now));
+        emit({ ...(now ?? {}), refresh }, (f) => f.renderLimits(now));
         return 0;
       }
 
@@ -374,7 +372,7 @@ async function main(argv: string[]): Promise<number> {
         const st = q.archiveStats(db);
         emit(
           st,
-          () =>
+          (f) =>
             [
               `archive      ${str(flags.db) ?? paths.db}`,
               `requests     ${f.num(st.requests)}  across ${st.sessions} sessions` +
@@ -398,7 +396,7 @@ async function main(argv: string[]): Promise<number> {
           (str(flags.by) ?? "agent") as q.AttributionDimension,
           window,
         );
-        emit(data, () => f.renderAttribution(data));
+        emit(data, (f) => f.renderAttribution(data));
         return 0;
       }
       case "timeline":
@@ -416,12 +414,12 @@ async function main(argv: string[]): Promise<number> {
           bucket: bucket as q.TimelineBucket,
           by: str(flags.by) as "model" | "project" | "effort" | undefined,
         });
-        emit(data, () => f.renderTimeline(data));
+        emit(data, (f) => f.renderTimeline(data));
         return 0;
       }
       case "blocks": {
         const data = q.blocks(db, readWindow(flags, "7d"));
-        emit(data, () => f.renderBlocks(data));
+        emit(data, (f) => f.renderBlocks(data));
         return 0;
       }
       case "statusline": {
@@ -432,7 +430,7 @@ async function main(argv: string[]): Promise<number> {
           str(flags.db) ?? paths.db,
           refreshMode(flags, "stale"),
         );
-        emit({ ...data, refreshScheduled }, () => f.renderStatusline(data));
+        emit({ ...data, refreshScheduled }, (f) => f.renderStatusline(data));
         return 0;
       }
       case "cost": {
@@ -450,7 +448,7 @@ async function main(argv: string[]): Promise<number> {
               ? "estimated"
               : undefined,
         });
-        emit(data, () => f.renderCost(data));
+        emit(data, (f) => f.renderCost(data));
         return 0;
       }
       case "cache": {
@@ -458,7 +456,7 @@ async function main(argv: string[]): Promise<number> {
           ...readWindow(flags, "30d"),
           by: str(flags.by) as "model" | "project" | undefined,
         });
-        emit(data, () => f.renderCache(data));
+        emit(data, (f) => f.renderCache(data));
         return 0;
       }
       case "doctor": {
@@ -466,7 +464,7 @@ async function main(argv: string[]): Promise<number> {
         const data = await doctor(db, str(flags.db) ?? paths.db, {
           repo: str(flags.repo),
         });
-        emit(data, () => f.renderDoctor(data));
+        emit(data, (f) => f.renderDoctor(data));
         return data.exitCode;
       }
       case "export": {

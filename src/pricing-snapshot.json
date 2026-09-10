@@ -72,7 +72,7 @@
         "input": 3,
         "output": 15,
         "cache_creation": 3.75,
-        "cache_read": 0.30000000000000004
+        "cache_read": 0.3
       }
     },
     "claude-haiku-4-5": {

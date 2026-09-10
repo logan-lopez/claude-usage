@@ -24,11 +24,16 @@ existing agents.
 Attribution and other grouped views expose full-selection request coverage,
 even when row caps hide groups. Tool-call groups overlap: count calls, and
 show request tokens as context rather than claiming per-tool consumption.
+Tool attribution is two grouped passes over a `tool_calls`-to-`requests` join,
+not a query per tool name; schema v3 adds the `(session_id, message_id)` index
+on each side, without which neither could seek and the view took 5.5s.
 Timeline calendar boundaries are UTC, weeks start Monday, and empty buckets
 remain present. Export uses SQLite iteration and stdout backpressure.
 
 Five-hour cycles use adjacent same-source meter drops (at least 5 points and
 50%), not request gaps or api_block_index. Gaps over 30 minutes remain gaps.
+Samples from the sources that lose the single-series choice are counted and
+reported, so set-aside observations do not read as missing data.
 OAuth reset times only confirm drops, clustering within two minutes of a fixed
 anchor. This deliberately misses some low-utilization resets. Local token
 columns remain separate context, not an explanation of the server meter.
@@ -38,8 +43,21 @@ transcribed from the approved briefing dated 2026-06-24; fetched_at is null
 rather than pretending a fetch occurred. Known [1m] requests remain unpriced;
 without cost-state, tier identity is unknown and labelled. Measured and
 estimated subtotals never blend. The anonymous calibration corpus contains
-166 measured sessions, including 59 zero-dollar sessions excluded only from
-percentage errors. No rates are fitted to the observed error distribution.
+166 measured sessions. No rates are fitted to the observed error distribution.
+
+The estimator's error distribution is scored over **fully priced sessions
+only** (61 of 166). A session whose every request is [1m] or an unknown model,
+or which has no ingested requests at all, estimates to $0 and scores a relative
+error of exactly 1.0 -- an absence graded as a wrong answer. Pooling those in
+put 37 sessions at exactly 1.0 and pinned p90 to 100%, a bound no improvement
+to the estimator could move. Declined sessions are reported beside the
+distribution in dollars so the hole stays visible.
+
+`statusline` carries no dollar figure. Grouped cost is exact-or-absent, so
+`cost --by day` excludes any session straddling UTC midnight -- nearly always
+the session in progress -- and a cost there would read $0.00 for most of the
+day. It shows today's tokens and requests, which need no attribution and no
+price table. Cost lives in `cusage cost`, where the exclusions are on screen.
 
 Sources: approved cusage phases 3-4 user briefing; README.md; src/args.ts;
 src/query.ts; src/pricing-snapshot.json; tools/build.ts; tests/pricing.test.ts.

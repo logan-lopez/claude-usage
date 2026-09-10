@@ -72,8 +72,10 @@ test("statusline is one archived line with age markers and respects the attempt 
     expect(output.trim().split("\n").length).toBe(1);
     expect(output).toContain("ago");
     expect(output).toContain("42%");
-    expect(output).toContain("measured");
-    expect(output).toContain("estimated");
+    // Tokens, not cost: `cost --by day` excludes the in-progress session, so a
+    // dollar figure here would read $0.00 for most of the day. See query.ts.
+    expect(output).toContain("tok");
+    expect(output).not.toContain("$");
     setMeta(db, LAST_ATTEMPT_KEY, String(Date.now()));
     expect(scheduleStatusRefresh(db, "unused", "force")).toBe(false);
     expect(scheduleStatusRefresh(db, "unused", "off")).toBe(false);

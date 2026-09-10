@@ -36,6 +36,10 @@ if (args.length === 0) {
         const rate = (rates as Record<string, unknown>)[key];
         if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0)
           throw new Error(`invalid ${model} ${key} rate`);
+        // Rates derived as multiples of the input price arrive with binary
+        // float tails (0.1 * 3 = 0.30000000000000004), which then live in a
+        // committed data file forever. Six decimals is $0.000001/MTok.
+        (rates as Record<string, number>)[key] = Math.round(rate * 1e6) / 1e6;
       }
   }
   if (!Object.keys(candidate.models).length)

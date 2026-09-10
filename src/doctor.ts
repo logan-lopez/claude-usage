@@ -109,7 +109,8 @@ export async function doctor(
     add("archive", "broken", "cannot read archive or run integrity check");
   }
   try {
-    add("size", "ok", `${deps.size(file)} bytes`);
+    const bytes = deps.size(file);
+    add("size", "ok", `${(bytes / 1e6).toFixed(1)} MB (${bytes} bytes)`);
   } catch {
     add("size", "broken", "archive file unavailable");
   }

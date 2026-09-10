@@ -564,7 +564,11 @@ export function renderBlocks(
       { header: "local req", get: (r) => num(r.local?.requests) },
       { header: "local tokens", get: (r) => num(r.local?.total_tokens) },
     ]) +
-    `\n${data.note}\nDetection: ${data.dropRule}; gaps >30m remain gaps.\n`
+    `\n${data.note}\nDetection: ${data.dropRule}; gaps >30m remain gaps.` +
+    (data.setAside.samples
+      ? `\n${num(data.setAside.samples)} ${data.setAside.sources.join("/")} samples set aside so one source defines the boundaries; some gaps above are those.`
+      : "") +
+    "\n"
   );
 }
 export function renderStatusline(
@@ -580,5 +584,5 @@ export function renderStatusline(
     ? `5h ${pct(meter.percent)} [${meter.source}, ${fmtAge(meter.ageMs)}]`
     : "5h ?";
   const t = data.today;
-  return `${scoped} · ${five} · ${usd(t.measured)} measured + ${usd(t.estimated)} estimated today UTC${t.complete ? "" : " (partial)"}${t.unknownTierRequests ? " [tier unknown]" : ""} [local ${fmtAge(t.latestRequestMs === null ? null : data.nowMs - t.latestRequestMs)}]\n`;
+  return `${scoped} · ${five} · ${num(t.total_tokens)} tok, ${num(t.requests)} req today UTC [local ${fmtAge(t.latestRequestMs === null ? null : data.nowMs - t.latestRequestMs)}]\n`;
 }

@@ -750,21 +750,28 @@ export function attribution(db: Database, by: AttributionDimension, opts: Reques
   let rows: (BreakdownRow & { calls?: number })[];
   let attributed: number;
   if (by === "tool") {
-    // EXISTS avoids multiplying tokens by repeated calls or streaming request keys.
-    const names = db.query(`SELECT DISTINCT t.tool_name AS key FROM tool_calls t WHERE t.tool_name IS NOT NULL
-      AND EXISTS (SELECT 1 FROM requests WHERE session_id=t.session_id AND message_id=t.message_id AND ${w.sql})`).all(w.params) as { key: string }[];
-    rows = names.map(({ key }) => {
-      const tokens = db.query(`SELECT ${TOTALS_SELECT} FROM requests WHERE ${w.sql} AND EXISTS
-        (SELECT 1 FROM tool_calls t WHERE t.session_id=requests.session_id AND t.message_id=requests.message_id AND t.tool_name=$tool)`)
-        .get({ ...w.params, $tool: key }) as TokenTotals;
-      const calls = (db.query(`SELECT COUNT(*) n FROM tool_calls t WHERE tool_name=$tool AND EXISTS
-        (SELECT 1 FROM requests WHERE session_id=t.session_id AND message_id=t.message_id AND ${w.sql})`)
-        .get({ ...w.params, $tool: key }) as { n: number }).n;
-      return { key, ...tokens, calls };
-    });
-    attributed = (db.query(`SELECT COUNT(*) n FROM requests WHERE ${w.sql} AND EXISTS
-      (SELECT 1 FROM tool_calls t WHERE t.session_id=requests.session_id AND t.message_id=requests.message_id AND t.tool_name IS NOT NULL)`)
-      .get(w.params) as { n: number }).n;
+    // One request may carry several calls of one tool and several tools. The
+    // DISTINCT subquery keys on the full request primary key, so a request is
+    // counted once per tool it used and its tokens are never multiplied by the
+    // call count. Calls are counted separately because they are the one figure
+    // that legitimately exceeds the request count.
+    const pairs = `SELECT DISTINCT t.tool_name AS key, r.message_id, r.request_id, r.session_id,
+        r.input_tokens, r.output_tokens, r.thinking_tokens, r.cache_creation_tokens,
+        r.cache_read_tokens, r.ephemeral_5m, r.ephemeral_1h, r.total_tokens
+      FROM tool_calls t JOIN requests r ON r.session_id = t.session_id AND r.message_id = t.message_id
+      WHERE t.tool_name IS NOT NULL AND ${requestWhere(opts, "r").sql}`;
+    const tokens = db.query(`SELECT key, ${TOTALS_SELECT} FROM (${pairs}) GROUP BY key`)
+      .all(w.params) as BreakdownRow[];
+    const calls = new Map((db.query(`SELECT t.tool_name AS key, COUNT(*) AS n FROM tool_calls t
+      WHERE t.tool_name IS NOT NULL AND EXISTS (SELECT 1 FROM requests r
+        WHERE r.session_id = t.session_id AND r.message_id = t.message_id AND ${requestWhere(opts, "r").sql})
+      GROUP BY t.tool_name`).all(w.params) as { key: string; n: number }[]).map(r => [r.key, r.n]));
+    rows = tokens.map(row => ({ ...row, calls: calls.get(row.key) ?? 0 }));
+    // Requests reached by any tool at all: the sum of the rows above would
+    // double-count a request that used more than one tool.
+    attributed = (db.query(`SELECT COUNT(*) n FROM (SELECT DISTINCT r.message_id, r.request_id, r.session_id
+      FROM tool_calls t JOIN requests r ON r.session_id = t.session_id AND r.message_id = t.message_id
+      WHERE t.tool_name IS NOT NULL AND ${requestWhere(opts, "r").sql})`).get(w.params) as { n: number }).n;
   } else {
     const column = ATTRIBUTION_COLUMNS[by];
     if (!column) throw new Error("invalid attribution dimension");
@@ -939,7 +946,18 @@ export function cost(db: Database, opts: RequestFilters & { by?: "model" | "proj
     totals, groups: rows.length, rows: rows.slice(0, opts.limit) };
 }
 
-/** Offline estimator audit: partial known-rate subtotal, not a fitted model. */
+/**
+ * Offline estimator audit: partial known-rate subtotal, not a fitted model.
+ *
+ * The error distribution is reported over *fully priced* sessions only, and
+ * that split is the whole point. A session whose every request is `[1m]` or an
+ * unknown model estimates to $0 and scores a relative error of exactly 1.0 --
+ * which is not a 100% estimation error, it is an absence being graded as a
+ * wrong answer. Pooling the two put 37 sessions at exactly 1.0 and pinned p90
+ * to 100%, a number that says nothing about the estimator and cannot move when
+ * the estimator improves. `declined` carries those sessions and their measured
+ * dollars so the hole stays visible rather than being smoothed into a quantile.
+ */
 export function estimatorAudit(db: Database) {
   const tiers = contextTiers(db);
   const sessions = db.query("SELECT session_id, total_cost_usd FROM sessions WHERE total_cost_usd IS NOT NULL ORDER BY session_id").all() as { session_id: string; total_cost_usd: number }[];
@@ -951,10 +969,28 @@ export function estimatorAudit(db: Database) {
       unpricedRequests: unpriced, requests: requests.length,
       absoluteError: Math.abs(estimated - session.total_cost_usd), relativeError: session.total_cost_usd > 0 ? Math.abs(estimated - session.total_cost_usd) / session.total_cost_usd : null };
   });
-  const errors = rows.map(r => r.relativeError).filter((e): e is number => e !== null).sort((a, b) => a - b);
+  const sum = (rs: typeof rows, key: "measured" | "estimated" | "requests" | "unpricedRequests") => rs.reduce((n, r) => n + r[key], 0);
+  // A session with no ingested requests is vacuously "fully priced" at $0 and
+  // scores 1.0 as well; six of them exist in the corpus. Same absence, same
+  // exclusion.
+  const priceable = (r: (typeof rows)[number]) => r.requests > 0 && r.unpricedRequests === 0;
+  const scored = rows.filter(r => priceable(r) && r.relativeError !== null);
+  const declined = rows.filter(r => !priceable(r));
+  const errors = scored.map(r => r.relativeError!).sort((a, b) => a - b);
   const quantile = (p: number) => errors.length ? errors[Math.min(errors.length - 1, Math.ceil(p * errors.length) - 1)]! : null;
-  return { sessions: rows.length, positiveCostSessions: errors.length, zeroCostSessions: rows.length - errors.length, measured: rows.reduce((n, r) => n + r.measured, 0), estimated: rows.reduce((n, r) => n + r.estimated, 0),
-    median: quantile(.5), p90: quantile(.9), worst: errors.at(-1) ?? null, rows };
+  return {
+    sessions: rows.length,
+    zeroCostSessions: rows.filter(r => r.relativeError === null).length,
+    measured: sum(rows, "measured"), estimated: sum(rows, "estimated"),
+    /** Every request priced and a positive measured total: the only sessions an error can be computed for. */
+    priced: { sessions: scored.length, measured: sum(scored, "measured"), estimated: sum(scored, "estimated"),
+      median: quantile(.5), p90: quantile(.9), worst: errors.at(-1) ?? null },
+    /** Nothing to price, or a request the estimator refused to price. Not an error -- a gap. */
+    declined: { sessions: declined.length, measured: sum(declined, "measured"),
+      requests: sum(declined, "requests"), unpricedRequests: sum(declined, "unpricedRequests"),
+      sessionsWithNoRequests: declined.filter(r => r.requests === 0).length },
+    rows,
+  };
 }
 
 export function cache(db: Database, opts: RequestFilters & { by?: "model" | "project" } = {}) {
@@ -1000,6 +1036,12 @@ export function blocks(db: Database, opts: RequestFilters = {}) {
   const source = samples.some(s => s.source === "desktop-history") ? "desktop-history"
     : samples.some(s => s.source === "oauth-live") ? "oauth-live" : "oauth-cache";
   const meter = samples.filter(s => s.source === source);
+  // Mixing sources would turn a disagreement between them into a spurious
+  // drop, so only one series drives the boundaries. The samples that lose are
+  // still real observations, and some of the rendered gaps are them -- say so
+  // rather than letting missing data and set-aside data look identical.
+  const setAside = { samples: samples.length - meter.length,
+    sources: [...new Set(samples.filter(s => s.source !== source).map(s => s.source))].sort() };
   const resets = clusterResets(samples.filter(s => s.source.startsWith("oauth") && s.reset).map(s => Date.parse(s.reset!)));
   const rows: MeterCycle[] = [];
   let active: MeterCycle | null = null;
@@ -1042,24 +1084,31 @@ export function blocks(db: Database, opts: RequestFilters = {}) {
   }
   const meta = reportMeta(db, opts);
   const covered = rows.reduce((n, r) => n + (r.local?.requests ?? 0), 0);
-  return { since, until, source, lastSampleMs: meter.at(-1)?.ts_ms ?? null, samples: meter.length,
+  return { since, until, source, setAside, lastSampleMs: meter.at(-1)?.ts_ms ?? null, samples: meter.length,
     coverage: coverage(meta.total, covered), resetToleranceMs: 120_000, gapThresholdMs: 1_800_000,
     dropRule: "drop of at least 5 percentage points and at least 50% between adjacent samples of one source",
     note: "Observed meter cycles, not inferred 5h token blocks. First/last cycles and gaps are partial. Time to peak is from first observation. Reset time is confirmed only by OAuth, otherwise bracketed by samples. Local activity is context, not explanation: historical r=0.69; 39% of intervals >=15% had no local activity.",
     cycles: rows.filter(r => r.kind === "cycle").length, rows: rows.slice(0, opts.limit) };
 }
 
+/**
+ * Tokens, not cost, and deliberately.
+ *
+ * `cost --by day` is right to exclude any session whose requests straddle a
+ * bucket boundary -- a cumulative cost-state total cannot be split across two
+ * days. But the session you are sitting in almost always started before UTC
+ * midnight, so the in-progress session is always excluded and "today" reads
+ * $0.00 for most of the day. A statusline that shows $0.00 while you spend
+ * money is the "never present a derived number as fact" failure wearing the
+ * opposite mask. Tokens need no attribution and no pricing snapshot, so they
+ * are exact. Cost lives in `cusage cost`, where the exclusions are visible.
+ */
 export function statusline(db: Database, nowMs = Date.now()) {
   const limits = currentLimits(db, { nowMs });
   const day = new Date(nowMs); day.setUTCHours(0, 0, 0, 0);
-  const today = cost(db, { since: day.getTime(), until: nowMs, by: "day" });
-  return { nowMs, limits, today: { timezone: "UTC", since: day.getTime(),
-    measured: today.totals.measured, estimated: today.totals.estimated,
-    complete: today.rows.every(r => r.cost_complete), requests: today.total,
-    latestRequestMs: today.lastTsMs, unpricedRequests: today.rows.reduce((n, r) => n + r.unpriced_requests, 0),
-    excludedSessions: today.rows.reduce((n, r) => n + r.sessions_split, 0),
-    unknownTierRequests: today.rows.reduce((n, r) => n + r.unknown_tier_requests, 0),
-  } };
+  const totals = corpusTotals(db, day.getTime());
+  const latestRequestMs = (db.query("SELECT MAX(ts_ms) t FROM requests").get() as { t: number | null }).t;
+  return { nowMs, limits, today: { timezone: "UTC", since: day.getTime(), ...totals, latestRequestMs } };
 }
 
 /** Preserve groupSessions' array API while adding full-selection CLI metadata. */
