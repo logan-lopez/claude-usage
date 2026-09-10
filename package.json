@@ -18,5 +18,8 @@
     "fixture": "bun run tools/make-fixture.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "15.0.0"
   }
 }

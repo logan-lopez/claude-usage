@@ -34,10 +34,10 @@ async function run(args: string[], db: string) {
   return { code: await p.exited, stdout, stderr };
 }
 
-function withDb<T>(fn: (db: string) => T): T {
+async function withDb<T>(fn: (db: string) => T): Promise<Awaited<T>> {
   const dir = mkdtempSync(`${tmpdir()}/cusage-cli-`);
   try {
-    return fn(`${dir}/usage.db`);
+    return await fn(`${dir}/usage.db`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -65,11 +65,7 @@ test("a global flag before the command does not eat the command", () => {
     command: "sessions", positional: [], flags: { "no-color": true, limit: "5" },
   });
   expect(parseArgs(["limits", "--refresh"]).flags).toEqual({ refresh: true });
-  // An unregistered flag stays boolean and its argument becomes positional --
-  // visible, rather than silently absorbed.
-  expect(parseArgs(["limits", "--bogus", "x"])).toEqual({
-    command: "limits", positional: ["x"], flags: { bogus: true },
-  });
+  expect(() => parseArgs(["limits", "--bogus", "x"])).toThrow("unknown option");
 });
 
 // Verification #10. The archiver runs hourly under launchd and the statusline
@@ -132,15 +128,21 @@ test("--json is machine-readable and carries no formatting", async () => {
   });
 });
 
-test("unimplemented phase 3-4 commands fail loudly rather than printing zero", async () => {
-  await withDb(async (db) => {
+test("new reports produce parseable JSON and CSV without ANSI", async () => {
+  await withDb(async db => {
     await run(["sync"], db);
-    for (const cmd of ["cost", "blocks", "attribution", "daily", "export", "pricing"]) {
-      const r = await run([cmd], db);
-      expect(`${cmd}:${r.code}`).toBe(`${cmd}:2`);
-      expect(r.stderr).toContain("not implemented");
-      expect(r.stdout).toBe("");
+    for (const command of ["attribution", "timeline", "daily", "weekly", "monthly", "cost", "cache", "blocks"]) {
+      const json = await run(["--json", command, "--since", "all", "--limit", "3"], db);
+      expect(json.code).toBe(0);
+      expect(JSON.parse(json.stdout).coverage.total).toBeGreaterThan(0);
+      const csv = await run([command, "--csv", "--since", "all", "--limit", "3"], db);
+      expect(csv.code).toBe(0);
+      expect(csv.stdout).not.toContain("\x1b[");
+      expect(csv.stdout).toContain("coverage");
     }
+    expect((await run(["pricing", "--refresh"], db)).code).toBe(2);
+    for (const args of [["limits", "--bogus", "x"], ["sessions", "--limit", "1.5"], ["sessions", "--limit", "x"], ["daily", "--until", "all"], ["sessions", "--json", "--csv"]])
+      expect((await run(args, db)).code).toBe(2);
   });
 });
 
@@ -240,5 +242,30 @@ test("sync --limits-only does not touch transcripts", async () => {
     const st = JSON.parse((await run(["status", "--json"], db)).stdout);
     expect(st.requests).toBe(0);
     expect(st.limitSamples).toBeGreaterThan(1500);
+  });
+});
+
+test("statusline background worker survives parent exit, consumes guard without network", async () => {
+  await withDb(async db => {
+    await run(["status"], db);
+    const p = Bun.spawn([BUN, "run", `${SRC}/cli.ts`, "statusline", "--json"], {
+      env: { ...env(db), CUSAGE_REFRESH: "force", CUSAGE_NO_KEYCHAIN: "1", CUSAGE_CREDENTIALS: `${db}.missing` },
+      stdout: "pipe", stderr: "pipe",
+    });
+    const out = JSON.parse(await new Response(p.stdout).text());
+    expect(await p.exited).toBe(0);
+    expect(out.refreshScheduled).toBe(true);
+    const { openDb } = await import("../src/schema.ts");
+    const archive = openDb(db);
+    try {
+      let attempted = false;
+      for (let i = 0; i < 100; i++) {
+        attempted = archive.query("SELECT 1 FROM meta WHERE key='oauth_live_last_attempt_ms'").get() !== null;
+        if (attempted) break;
+        await Bun.sleep(10);
+      }
+      expect(attempted).toBe(true);
+      expect((archive.query("SELECT COUNT(*) n FROM limit_samples WHERE source='oauth-live'").get() as { n: number }).n).toBe(0);
+    } finally { archive.close(); }
   });
 });

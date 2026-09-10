@@ -27,8 +27,8 @@ is reachable — keep that test.
 **The layering is `query.ts` → data, `format.ts` → strings, `cli.ts` → argv.**
 Consequences, all of which are load-bearing:
 
-- `--json` is `JSON.stringify` on a `query.ts` result and never touches
-  `format.ts`. A test asserts the JSON output contains no ANSI.
+- `--json` is `JSON.stringify` on a `query.ts` result; `--csv` uses pure
+  `serialize.ts`. Neither machine path loads `format.ts`. A test asserts the JSON output contains no ANSI.
 - `format.ts` has no database handle and no I/O, so every view is unit-testable
   without spawning a process.
 - The TUI will consume `query.ts` directly. It is not a rewrite of `cli.ts`.
@@ -69,9 +69,10 @@ Two things survive from the old rule and are still load-bearing:
   blast-radius rule, unrelated to packaging, and a dependency does not get to
   quietly bring one along.
 
-How the agents are actually invoked — a compiled binary at a fixed path, or
-`bun run` inside this checkout — is an open decision, not yet settled here.
-Today it is the checkout; see `launchd/*.template`.
+The phase 3–4 briefing settled the previously open install choice: `make install`
+builds separate CLI/TUI executables in `~/.local/bin`. Launchd runs the CLI there
+with `$HOME` as its working directory. `doctor` reports stale or dirty build
+stamps. Rebuild after changes; the installed binary does not follow source edits.
 
 **One endpoint, and a floor in front of it.** The original rule was "no
 automatic network calls, ever", and it was wrong for a specific reason worth
@@ -82,7 +83,8 @@ figure was 74%. The rule was protecting a stale number.
 What replaced it is narrow, and each clause is load-bearing:
 
 - `GET https://api.anthropic.com/api/oauth/usage`, and no other host. `src/oauth.ts`
-  is the only file that may call `fetch`.
+  is the only shipped file that may call `fetch`. `tools/refresh-pricing.ts` is
+  a manual developer-only exception and never imported by the CLI.
 - `MIN_REFRESH_MS` is a floor of 3 minutes between *attempts*, keyed on
   attempts rather than successes so a 401 cannot be retried faster than a
   success, and persisted in `meta` so it holds across processes. It is
@@ -141,12 +143,9 @@ reaches the login keychain from a LaunchAgent in the GUI session. If that ever
 changes, `fromKeychain` kills the subprocess after 5s rather than letting a job
 hang on a keychain dialog forever.
 
-`bun` is invoked by absolute path (`~/.bun/bin/bun`) because node lives behind
-an ephemeral fnm multishell path that launchd does not have.
-
-The install script warns if it is run from a Conductor worktree: those are
-deleted when the workspace is archived, and the agents would start failing
-silently. Re-run it from the canonical checkout after merging.
+The agents invoke `~/.local/bin/cusage`, not Bun or a worktree source file.
+The templates and installer no longer depend on the checkout after installation.
+Re-run the installer once to migrate existing source-based agents.
 
 Logs: `~/Library/Logs/claude-usage/{sync,limits}.log`.
 

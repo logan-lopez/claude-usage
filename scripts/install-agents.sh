@@ -3,7 +3,7 @@
 #
 #   scripts/install-agents.sh [repo-root]
 #
-# Defaults to the repo this script lives in. Re-run it any time the repo moves;
+# Defaults to the repo this script lives in. The installed agents do not depend on it;
 # it overwrites and reloads.
 set -euo pipefail
 
@@ -16,14 +16,9 @@ if [[ ! -f "$REPO/src/cli.ts" ]]; then
   echo "error: $REPO does not look like the claude-usage repo (no src/cli.ts)" >&2
   exit 1
 fi
-if [[ ! -x "$HOME/.bun/bin/bun" ]]; then
-  echo "error: no bun at $HOME/.bun/bin/bun" >&2
+if [[ ! -x "$HOME/.local/bin/cusage" ]]; then
+  echo "error: run make install first (no ~/.local/bin/cusage binary)" >&2
   exit 1
-fi
-if [[ "$REPO" == *"/conductor/workspaces/"* ]]; then
-  echo "WARNING: $REPO is a Conductor worktree, which is deleted when the" >&2
-  echo "         workspace is archived. The agents will start failing then." >&2
-  echo "         Re-run this script from the canonical checkout after merging." >&2
 fi
 
 mkdir -p "$AGENTS" "$LOGS"

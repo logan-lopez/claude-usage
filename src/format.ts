@@ -87,7 +87,7 @@ function breakdownTable(rows: BreakdownRow[], label: string): string {
     { header: label, get: (r) => r.key },
     ...(TOKEN_COLS as Column<BreakdownRow>[]),
   ];
-  return `\n${b(label)}\n${table(rows, cols, "  ")}\n`;
+  return `\n${b(label)}\n${renderCoverage({ total: rows.reduce((n, r) => n + r.requests, 0), attributed: real.reduce((n, r) => n + r.requests, 0), unattributed: rows.filter(r => r.key === "(none)").reduce((n, r) => n + r.requests, 0), percent: real.reduce((n, r) => n + r.requests, 0) / Math.max(1, rows.reduce((n, r) => n + r.requests, 0)) * 100 })}\n${table(rows, cols, "  ")}\n`;
 }
 
 export function renderSession(detail: SessionDetail): string {
@@ -111,6 +111,7 @@ export function renderSession(detail: SessionDetail): string {
   );
   out.push("");
 
+  out.push(`${detail.apiBlockCount} API blocks (per-session counter, not five-hour windows)`);
   out.push(b("Tokens"));
   out.push(table([{ key: "total", ...s }], [
     { header: "", get: () => "" },
@@ -128,6 +129,12 @@ export function renderSession(detail: SessionDetail): string {
       [{ header: "", get: (r: any) => r.key }, ...(TOKEN_COLS as Column<any>[])],
       "  ",
     ));
+  }
+
+  if (detail.subAgents.length) {
+    out.push(`\n${b(`Sub-agents of ${s.session_id}`)}`);
+    out.push(table(detail.subAgents, [{ header: "agent", get: r => r.key }, ...TOKEN_COLS], "  "));
+    out.push(renderCoverage({ total: s.requests, attributed: detail.subAgents.reduce((n, r) => n + r.requests, 0), unattributed: detail.main.requests, percent: detail.sidechain.requests / Math.max(1, s.requests) * 100 }));
   }
 
   for (const [rows, label] of [
@@ -182,8 +189,10 @@ export function renderSessions(rows: SessionRow[]): string {
   ]);
 }
 
-export function renderGroups(rows: GroupRow[], label: string): string {
-  const body = table(rows, [
+export function renderGroups(rows: GroupRow[], label: string, fullCoverage?: import("./query.ts").Coverage): string {
+  const total = rows.reduce((n, r) => n + r.requests, 0);
+  const attributed = rows.filter(r => r.key !== "(unknown)").reduce((n, r) => n + r.requests, 0);
+  const body = renderCoverage(fullCoverage ?? { total, attributed, unattributed: total - attributed, percent: total ? attributed / total * 100 : 0 }) + "\n" + table(rows, [
     { header: label, get: (r) => truncate(r.key, 40) },
     { header: "sess", get: (r) => String(r.sessions), align: "right" },
     ...(TOKEN_COLS as Column<GroupRow>[]),
@@ -430,4 +439,146 @@ export function renderLimitsHistory(h: LimitsHistory): string {
   }
   out.push(d("  buckets hold the peak, not the mean; gaps are shown as · and never bridged."));
   return out.join("\n") + "\n";
+}
+
+export function renderCoverage(c: import("./query.ts").Coverage): string {
+  return `attributed: ${num(c.attributed)} of ${num(c.total)} requests (${c.percent.toFixed(1)}%) · ${num(c.unattributed)} unattributed`;
+}
+function renderReportMeta(data: {
+  source: string;
+  lastTsMs: number | null;
+  coverage: import("./query.ts").Coverage;
+}): string {
+  return `${data.source} · latest request ${fmtWhenMs(data.lastTsMs)} UTC\n${renderCoverage(data.coverage)}`;
+}
+export function renderAttribution(
+  data: ReturnType<typeof import("./query.ts").attribution>,
+): string {
+  return (
+    `${b(`Attribution by ${data.by}`)}\n${renderReportMeta(data)}\n` +
+    table(data.rows, [
+      { header: data.by, get: (r) => r.key },
+      ...TOKEN_COLS,
+      ...(data.by === "tool"
+        ? [
+            {
+              header: "calls",
+              get: (r: (typeof data.rows)[number]) => num(r.calls),
+            },
+          ]
+        : []),
+    ]) +
+    `\n${data.rows.length} of ${data.groups} groups shown\n` +
+    (data.note ? `${data.note}\n` : "")
+  );
+}
+export function renderTimeline(
+  data: ReturnType<typeof import("./query.ts").timeline>,
+): string {
+  return (
+    `${b(`Timeline (${data.bucket}, UTC)`)}\n${renderReportMeta(data)}\n` +
+    table(data.rows, [
+      { header: "bucket (UTC)", get: (r) => fmtWhenMs(r.tsMs) },
+      { header: data.by ?? "group", get: (r) => r.key },
+      ...TOKEN_COLS,
+    ]) +
+    `\n${data.rows.length} of ${data.buckets} bucket rows shown\n`
+  );
+}
+export function renderDoctor(
+  data: Awaited<ReturnType<typeof import("./doctor.ts").doctor>>,
+): string {
+  return (
+    table(data.checks, [
+      { header: "check", get: (r) => r.name },
+      { header: "status", get: (r) => r.level },
+      { header: "detail", get: (r) => r.detail },
+    ]) + "\n"
+  );
+}
+export function renderCost(
+  data: ReturnType<typeof import("./query.ts").cost>,
+): string {
+  return (
+    `${b(`Cost by ${data.by}`)}\n${renderReportMeta(data)}\nmeasured coverage: ${renderCoverage(data.measuredCoverage)}\n` +
+    `pricing: ${data.pricing.source} · fetched ${data.pricing.fetched_at ?? "not independently fetched"}\n` +
+    table(data.rows, [
+      { header: data.by, get: (r) => r.key },
+      { header: "basis", get: (r) => r.basis },
+      { header: "sessions", get: (r) => num(r.sessions) },
+      { header: "req", get: (r) => num(r.requests) },
+      {
+        header: "USD",
+        get: (r) => usd(r.cost_usd) + (r.cost_complete ? "" : "+"),
+      },
+      { header: "excluded sessions", get: (r) => num(r.sessions_split) },
+      { header: "unpriced req", get: (r) => num(r.unpriced_requests) },
+      { header: "tier unknown req", get: (r) => num(r.unknown_tier_requests) },
+    ]) +
+    `\n${data.rows.length} of ${data.groups} groups shown\n${data.note}\n`
+  );
+}
+export function renderCache(
+  data: ReturnType<typeof import("./query.ts").cache>,
+): string {
+  return (
+    `${b(`Cache by ${data.by}`)}\n${renderReportMeta(data)}\n` +
+    table(data.rows, [
+      { header: data.by, get: (r) => r.key },
+      { header: "cache read", get: (r) => num(r.cache_read_tokens) },
+      { header: "cache create", get: (r) => num(r.cache_creation_tokens) },
+      {
+        header: "read/create",
+        get: (r) => r.readCreationRatio?.toFixed(2) ?? "-",
+      },
+      { header: "5m", get: (r) => num(r.ephemeral_5m) },
+      { header: "1h", get: (r) => num(r.ephemeral_1h) },
+      { header: "gap (tokens)", get: (r) => num(r.reconciliationGap) },
+    ]) +
+    `\n${data.rows.length} of ${data.groups} groups shown\ngap = creation - (5m + 1h); not normalized\n`
+  );
+}
+export function renderBlocks(
+  data: ReturnType<typeof import("./query.ts").blocks>,
+): string {
+  return (
+    `${b("Observed five-hour meter cycles")} · ${data.source} · latest ${fmtWhenMs(data.lastSampleMs)} UTC\n` +
+    `${renderCoverage(data.coverage)} (local requests within observed intervals)\n` +
+    table(data.rows, [
+      { header: "start (UTC)", get: (r) => fmtWhenMs(r.startMs) },
+      { header: "end (UTC)", get: (r) => fmtWhenMs(r.endMs) },
+      {
+        header: "peak",
+        get: (r) => (r.kind === "gap" ? "· gap" : pct(r.peakPct)),
+      },
+      { header: "time to peak", get: (r) => fmtDuration(r.timeToPeakMs) },
+      {
+        header: "reset (UTC)",
+        get: (r) =>
+          r.resetConfirmed
+            ? `${fmtWhenMs(r.resetAtMs)} confirmed`
+            : r.resetBetween
+              ? `${fmtWhenMs(r.resetBetween[0])}–${fmtWhenMs(r.resetBetween[1])} observed`
+              : "unknown / partial",
+      },
+      { header: "local req", get: (r) => num(r.local?.requests) },
+      { header: "local tokens", get: (r) => num(r.local?.total_tokens) },
+    ]) +
+    `\n${data.note}\nDetection: ${data.dropRule}; gaps >30m remain gaps.\n`
+  );
+}
+export function renderStatusline(
+  data: ReturnType<typeof import("./query.ts").statusline>,
+): string {
+  const l = data.limits;
+  const binding = l?.binding;
+  const scoped = binding
+    ? `${binding.scope_model || binding.kind} ${pct(binding.percent)} [${binding.source}, ${fmtAge(binding.ageMs)}]`
+    : "scoped ?";
+  const meter = l?.fiveHour;
+  const five = meter
+    ? `5h ${pct(meter.percent)} [${meter.source}, ${fmtAge(meter.ageMs)}]`
+    : "5h ?";
+  const t = data.today;
+  return `${scoped} · ${five} · ${usd(t.measured)} measured + ${usd(t.estimated)} estimated today UTC${t.complete ? "" : " (partial)"}${t.unknownTierRequests ? " [tier unknown]" : ""} [local ${fmtAge(t.latestRequestMs === null ? null : data.nowMs - t.latestRequestMs)}]\n`;
 }

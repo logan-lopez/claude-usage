@@ -174,3 +174,38 @@ test("a failed fetch is soft, consumes the guard, and is not retried", async () 
     }
   });
 });
+
+test("concurrent processes atomically claim only one refresh attempt", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { openDb } = await import("../src/schema.ts");
+  const dir = mkdtempSync(`${tmpdir()}/cusage-guard-race-`);
+  const file = `${dir}/usage.db`;
+  openDb(file).close();
+  try {
+    const children = Array.from({ length: 4 }, () => Bun.spawn([process.execPath, "run", `${import.meta.dir}/../src/cli.ts`, "limits", "--refresh", "--json", "--db", file], {
+      env: { ...process.env, CUSAGE_REFRESH: "force", CUSAGE_NO_KEYCHAIN: "1", CUSAGE_CREDENTIALS: `${dir}/absent.json` },
+      stdout: "pipe", stderr: "pipe",
+    }));
+    const results = await Promise.all(children.map(async p => { const data = JSON.parse(await new Response(p.stdout).text()); expect(await p.exited).toBe(0); return data.refresh; }));
+    expect(results.filter(r => r.attempted).length).toBe(1);
+    expect(results.filter(r => r.reason === "guard").length).toBe(3);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a busy archive cannot bypass the guard or turn a refresh failure into an exception", async () => {
+  const dir = mkdtempSync(`${tmpdir()}/cusage-busy-`);
+  const first = openDb(`${dir}/usage.db`);
+  const second = openDb(`${dir}/usage.db`);
+  try {
+    second.run("PRAGMA busy_timeout=0");
+    first.run("BEGIN IMMEDIATE");
+    const result = await refreshFromApi(second, { mode: "force" });
+    expect(result.reason).toBe("failed");
+    expect(result.attempted).toBe(false);
+    expect(result.error).toContain("no request sent");
+  } finally {
+    first.run("ROLLBACK"); first.close(); second.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

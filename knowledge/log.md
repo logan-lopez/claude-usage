@@ -1,3 +1,8 @@
+## 2026-09-10
+* **Update**: Updated concept `architecture/grouped-cost-is-exact-or-absent.md`.
+* **Creation**: Documented concept `architecture/cli-reports-and-binary-install.md` (CLI reports preserve provenance and install as standalone binaries).
+* **Update**: Updated concept `architecture/live-oauth-fetch-with-guard.md`.
+
 ## 2026-09-09
 * **Update**: Linked `architecture/session-rollup-scoped-to-read-files.md` to `findings/corpus-shape-2026-09-09.md` (The 510 sessions and 8,913 requests that made the full-table roll-up measurable waste).
 * **Update**: Updated concept `architecture/session-rollup-scoped-to-read-files.md`.

@@ -1,8 +1,9 @@
 ---
 type: Decision
 title: Grouped cost excludes sessions that straddle groups rather than double-counting them
-description: Because cost-state is recorded per session and one session's requests can span several projects or models, grouped views sum cost only for sessions wholly inside a group and report the straddlers separately.
-generated: { by: agent/cli, at: 2026-09-09T17:39:54Z }
+description: Grouped session and cost views share an exact-or-absent rule that excludes sessions split across groups or partly removed by a filter instead of assigning cumulative lifetime cost to incomplete selections.
+generated: { by: agent/codex, at: 2026-09-10T00:54:25Z }
+sources: ["README.md", "src/query.ts", "src/limits.ts", "approved phase 3-4 user briefing"]
 ---
 
 ## Decision
@@ -42,3 +43,20 @@ truth, and that any shortfall is declared.
 
 # Related Concepts
 - [Measured shape of the local Claude Code corpus, 2026-09-09](../findings/corpus-shape-2026-09-09.md): cost-state coverage and the cumulative-record trap that sets the ground truth
+
+## Phase 3-4 update (2026-09-10 UTC)
+
+`exactSessionCost()` is the shared decision for `groupSessions()` and `cost()`.
+Membership is checked against the complete session, not only selected rows:
+a time/project/model filter that removes any request makes cumulative measured
+cost ineligible. Split or partly selected sessions still contribute requests,
+but cost is excluded and marked incomplete. Cost estimates apply only to
+sessions without measured cost-state and are reported as separate basis rows.
+
+The earlier suggestion that phase 3 would apportion split costs by priced
+tokens is superseded by the approved briefing: measured grouped costs remain
+exact or absent. `cost --by session --since all` is the exact session cut.
+`sessions --by ...` CLI output now wraps rows with coverage and provenance;
+the reusable groupSessions array API remains unchanged.
+
+Sources: approved phase 3-4 briefing; `src/query.ts`; `tests/pricing.test.ts`.

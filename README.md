@@ -19,21 +19,41 @@ cusage sessions --by project   # where the tokens went
 cusage limits                  # server truth, including the limit the tray does not show
 cusage limits --history        # the meters over time, from ~2,000 archived samples
 cusage status                  # what the archive holds
+cusage attribution --by skill   # attributed requests and missing coverage
+cusage daily --since 30d        # UTC timeline, including empty days
+cusage cost --by session        # measured and estimated costs stay separate
+cusage blocks --since 7d        # observed meter cycles, local tokens alongside
+cusage cache --by model         # cache ratios and the reconciliation gap
+cusage statusline               # archived one-line view; refresh in background
+cusage doctor                  # archive, launchd, credentials and build health
+cusage export --format ndjson   # streaming archive export
 ```
 
 ## Install
 
-Requires [Bun](https://bun.com) at `~/.bun/bin/bun` (pinned: **1.3.3**).
-There are no runtime dependencies today, but that is a fact about the current
-code rather than a rule: `bun build --compile` produces a self-contained binary
-with the runtime and any dependency inside it, so the launchd agents have no
-install surface to break either way.
+Development builds require [Bun](https://bun.com) (**1.3.3 tested**).
+Commander 15 is the CLI's runtime dependency. Installed executables embed Bun
+and their dependencies; neither the checkout nor `node_modules` is needed to run.
 
 ```bash
-bun install                 # dev types only
-bun run src/cli.ts sync     # first sync: ~2s for a 240 MB corpus
+bun install --frozen-lockfile
+make build                  # dist/cusage and separate dist/cusage-tui
+make install                # rebuild; atomic replacement in ~/.local/bin
+cusage sync                 # first sync: ~2s for a 240 MB corpus
 ./scripts/install-agents.sh # hourly sync + 15-minute limits snapshot
 ```
+
+Launch agents execute `~/.local/bin/cusage` with `$HOME` as their working
+directory. Archiving a Conductor worktree no longer removes their executable
+or working directory. `make install` does not reload launch agents; rerun the
+installer once to migrate existing plists. The TUI binary remains a separate
+phase-5 stub, not part of the CLI import graph.
+
+Every build embeds its Git SHA, build time, source checkout and dirty flag.
+`cusage doctor --repo /path/to/checkout` compares against that checkout's HEAD;
+`CUSAGE_REPO` overrides the embedded path. A missing checkout, different SHA,
+or dirty build is a warning, not a silently trusted build. Rebuild after edits.
+`BIN_DIR` can override the installation directory for packaging tests.
 
 The archive lives at `~/.local/share/claude-usage/usage.db` — outside the repo,
 because it is data, not config. Override with `$CUSAGE_DB`. Removing the agents
@@ -91,7 +111,8 @@ was protecting a number that was wrong.
 So the rule is now specific rather than absolute:
 
 - **One endpoint, `GET https://api.anthropic.com/api/oauth/usage`.** No other
-  host is contacted by anything in this repo. It is a read; nothing is sent but
+  host is contacted by shipped code. The manually invoked developer pricing
+  refresh tool downloads pricing documentation; it is not shipped or scheduled. It is a read; nothing is sent but
   the bearer token.
 - **A 3-minute floor between attempts**, successful or not, persisted in the
   archive so it holds across processes — a launchd agent and a statusline poll
@@ -129,8 +150,9 @@ So the rule is now specific rather than absolute:
   hours. That is claude.ai and Desktop chat usage, and it is not on disk.
   Correlation between the five-hour meter and local output tokens is r=0.69;
   for the seven-day meter it is r=0.04 — **not derivable**.
-- **`cost-state` covers 162 of 506 sessions.** The rest need estimated pricing
-  (phase 3). Sessions are marked `measured` or `estimated`, never blended.
+- **`cost-state` covered 166 of 513 sessions in the calibration capture.**
+  Other sessions use explicit token rates and are labelled estimated, never
+  blended with measured spend. This is API-equivalent cost, not subscription billing.
 - **Grouped cost is exact or absent.** cost-state is recorded per *session*, and
   one session's requests can land in several projects. Summing that session
   into each group it touched turned $90 of real spend into $226 on the test
@@ -206,10 +228,144 @@ and a sparkline that closes them invents a quiet period. The sparse
 `weekly_scoped` row is honest too — that series only exists for periods where
 `cusage` fetched it, because nothing on disk records it.
 
+## CLI reporting contracts
+
+Run `cusage --help` or `cusage <command> --help` for generated option help.
+Unknown options and invalid grouping values fail with exit 2. Exit 0 means
+success; `session` with no match exits 1. Doctor uses 0 clear, 1 warnings,
+2 broken. `--db`, `--json`, `--csv`, `--no-color`, `--refresh` and
+`--no-refresh` work before or after the command. JSON and CSV never load the
+human formatter. CSV quotes commas, quotes and newlines; report metadata,
+including coverage, repeats on each data row.
+
+Request reports accept `--since <duration|ISO|all>`, `--until <duration|ISO>`,
+`--project <substring>`, `--model <substring>`, and positive-integer `--limit`.
+Project/model matching is case-insensitive and literal (`%` is not a wildcard).
+Windows are start-inclusive/end-exclusive. Session lists and session exports
+select whole sessions by their last activity, so their totals remain lifetime
+totals; grouped session reports filter individual requests. Limit history
+retains its existing inclusive endpoint convention.
+
+Every grouped report includes request coverage. `sessions --by ... --json`
+now returns `{ rows, coverage, ...metadata }`, not the old bare array.
+Row limits never change coverage or cost report totals. Tool attribution counts
+calls separately and uses each matching request once per tool; a request can
+appear under several tools, so those token columns must not be summed as
+per-tool consumption. Session details also show spawned agent identities and
+the count of distinct per-session API block indexes.
+
+### Timeline and export
+
+`timeline --bucket day|week|month|auto` shares one query with `daily`, `weekly`,
+and `monthly` (fixed day/week/month presets). Calendar boundaries are UTC,
+weeks begin Monday, and empty buckets are emitted for each selected group.
+Auto uses the existing `chooseBucket` ladder. The default window is 30 days.
+
+`export --table requests|sessions|tools|limits --format json|ndjson|csv`
+iterates SQLite rows and respects stdout backpressure. All three formats
+stream; NDJSON is the default. `--json` and `--csv` are shortcuts; conflicting
+format choices fail. Limit samples cannot be filtered by local project/model.
+
+### Cost: exact measurements, explicitly incomplete estimates
+
+`cost [--since 30d] [--by model|project|session|day] [--measured|--estimated]`
+never combines measured and estimated dollars into one total. The mode flags
+select the measurement basis; they do not force measured sessions to become
+estimates. Measured cost is cumulative keep-max per session. A session spanning
+several groups **or partly excluded by a time/project/model filter** contributes
+requests but no measured dollars; `+` and exclusion counts explain the gap.
+The same `exactSessionCost` rule is used by `sessions --by` and `cost`.
+Consequently `cost --by model` can have substantial measured exclusions for
+multi-model sessions; `cost --by session --since all` is the exact session cut.
+
+`src/pricing-snapshot.json` contains explicit per-model/per-speed input,
+output, cache-creation and cache-read rates from the approved briefing (dated
+2026-06-24). Its initial `fetched_at` is **null**, because transcription from
+the briefing is not an independent fetch. Fable 5.1 cache reads are $0.25/MTok;
+Opus 5 fast has its own rate. Dated aliases normalize to the base model.
+Unknown models/speeds and known `[1m]` tiers are unpriced, never guessed.
+Missing speed assumes standard; cache creation uses the briefing's 5m rate,
+not an inferred 1h premium. Thinking tokens are already included in output.
+
+Cost-state model lists back-label known `[1m]` requests for the estimator audit.
+Without cost-state, the tier cannot be detected: estimated rows explicitly
+count requests whose tier is unknown. Estimates are rate-based API equivalents,
+not a measurement of subscription consumption.
+
+```bash
+bun run tools/refresh-pricing.ts
+# Review .context/pricing-source.html and prepare explicit rates, then:
+bun run tools/refresh-pricing.ts --rates /path/to/curated-snapshot.json
+```
+
+The developer tool fetches documentation and requires reviewed structured
+rates before changing the snapshot. It never scrapes monetary values into a
+production price table blindly. There is no shipped `pricing` command.
+
+#### Frozen aggregate estimator acceptance
+
+Captured from the read-only live archive on 2026-09-10 UTC (2026-09-09 local),
+`fixtures/pricing-calibration.json` holds **166 anonymous measured sessions**:
+only model/speed token aggregates, tier model names, and cumulative dollar
+truth. No IDs, paths, timestamps per session, or content. Regenerate explicitly
+with `bun run tools/make-pricing-calibration.ts`; ordinary tests never read live data.
+
+| Audit measure | Frozen result |
+|---|---:|
+| Measured sessions | 166 |
+| Positive-dollar sessions (percentage-error denominator) | 107 |
+| Zero-dollar sessions (relative error undefined) | 59 |
+| Measured total | $752.04845015 |
+| Known-rate estimated subtotal | $500.15662315 |
+| Median absolute relative error | 21.73% |
+| p90 absolute relative error | 100.00% |
+| Worst absolute relative error | 193.99% |
+
+Errors compare each session's known-rate subtotal with cumulative measured
+cost. Unpriceable `[1m]` and unknown-model amounts are omitted from that subtotal,
+so these are **not accuracy claims for a complete estimator**. Forty positive-cost
+sessions have unpriced requests. Zero-dollar sessions remain in the aggregate
+but cannot supply percentage errors. The offline suite fixes the dollar totals
+and asserts median <23%, p90 <=100%, worst <200%, without fitting any rates.
+
+### Observed meter cycles
+
+`blocks --since 7d` uses one source's five-hour meter series: desktop history
+when available, otherwise live OAuth, otherwise cached OAuth. A boundary is a
+drop of at least **5 percentage points and 50%** between adjacent samples.
+This conservative threshold can miss low-utilization resets; it does not invent
+windows from request gaps or `api_block_index`.
+
+OAuth reset timestamps confirm observed boundaries only. They are clustered
+within two minutes of a fixed cluster anchor, not equality or minute truncation.
+Unconfirmed resets remain observation brackets. Gaps over 30 minutes stay `·`;
+local activity during gaps is not assigned to a cycle. First/last cycles are
+partial, and time-to-peak starts at the first observation. Local request/token
+columns are context alongside the server meter, not a causal explanation.
+
+### Operations
+
+`statusline` returns one archived line immediately, with per-meter source/age
+and separate measured/estimated UTC-today subtotals. Missing, stale, tier-unknown
+and partial costs stay labelled. A short-lived background CLI refreshes stale
+limits; it never delays the line for keychain/network. The SQLite attempt claim
+is atomic across processes, and the same three-minute floor applies. Use
+`--no-refresh` or `CUSAGE_REFRESH=off` to disable the worker.
+
+`doctor` checks both launch agents and their exit status, newest request/limit
+row ages, read-only integrity, file size, disappeared ingest sources, build
+stamp, credential presence, and transcript directory availability. Stale rows
+beyond twice the job interval are broken checks; inactivity can also cause an
+old request row, and the diagnostic says so. Deleted source files are warnings:
+the archive intentionally survives them. Credentials are never shown.
+
+`cache --by model|project` shows cache read/creation ratio, 5m/1h creation counts,
+and `creation - (5m + 1h)` as a signed reconciliation gap. Nothing is normalized.
+
 ## Testing
 
 ```bash
-bun test          # 81 tests, no remote network, no live data
+bun test          # offline: frozen fixtures and synthetic edge cases
 bun run fixture   # regenerate fixtures/ from the live corpus
 bunx tsc --noEmit
 ```
@@ -233,9 +389,8 @@ itself.
 |---|---|---|
 | 1 | archiver — schema, ingest, limits, `sync`, both launchd agents | done |
 | 2 | `session`, `sessions`, `limits`, `limits --history`, `status` | done |
-| 3 | `pricing.ts`, `cusage cost` | not started |
-| 4 | `blocks`, `attribution`, `daily`/`weekly`/`monthly`, `export` | not started |
+| 3 | pricing snapshot, `cost`, frozen aggregate calibration | done |
+| 4 | attribution, timeline/aliases, export, cycles, cache, doctor, statusline, binaries | done |
 | 5 | Ink TUI | not started |
 
-Phase 3–4 commands exist in the dispatch table and exit 2 with "not
-implemented" rather than printing a zero.
+The TUI remains out of scope. `pricing --refresh` was cancelled; pricing refresh is developer-only.
