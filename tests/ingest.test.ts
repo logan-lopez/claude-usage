@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, cpSync, rmSync, writeFileSync, readFileSync, truncateSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { openDb, SCHEMA_VERSION } from "../src/schema.ts";
+import { openDb, migrate, MIGRATIONS, SCHEMA_VERSION } from "../src/schema.ts";
 import { findTranscripts, ingestTranscripts, mcpServerOf, rollupSessions } from "../src/ingest.ts";
 import { baseline, freshDb, FIXTURE_TRANSCRIPTS, totals } from "./helpers.ts";
 
@@ -311,20 +312,25 @@ test("the scoped roll-up matches a full sweep", () => {
   expect(snapshot()).toBe(incremental);
 });
 
-test("a v1 archive migrates to v2 with its counts intact", () => {
+test("a real v1 archive migrates to the current version with its counts intact", () => {
   const dir = mkdtempSync(`${tmpdir()}/cusage-migrate-`);
   const file = `${dir}/usage.db`;
   try {
-    // Rewind a current archive to exactly the v1 shape, values and all.
-    const v1 = openDb(file);
-    v1.run("ALTER TABLE sessions RENAME COLUMN request_count TO message_count");
-    v1.run("INSERT INTO sessions (session_id, message_count) VALUES ('s1', 7)");
+    // Built from the shipped v1 migration itself, not rewound from a current
+    // archive: a rewind needs a hand-written undo for every migration added
+    // after it, and silently stops testing anything when one is missed.
+    const v1 = new Database(file, { create: true });
+    v1.run(MIGRATIONS[0]!);
     v1.run("PRAGMA user_version = 1");
+    v1.run("INSERT INTO sessions (session_id, message_count) VALUES ('s1', 7)");
     v1.close();
 
     const db = openDb(file);
     expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version)
       .toBe(SCHEMA_VERSION);
+    // Re-running against an already-migrated archive is a no-op, not a
+    // collision: every migration has to be safe to replay from its own version.
+    expect(() => migrate(db)).not.toThrow();
     const cols = (db.query("PRAGMA table_info(sessions)").all() as { name: string }[])
       .map((c) => c.name);
     expect(cols).toContain("request_count");

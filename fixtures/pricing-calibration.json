@@ -1,0 +1,2158 @@
+{
+  "captured_at": "2026-09-10T00:42:06.671Z",
+  "source": "read-only archive: grouped token counts and cumulative session cost-state",
+  "sessions": [
+    {
+      "measured": 1.351935,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 3.1129682499999998,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 10,
+          "input_tokens": 1256,
+          "output_tokens": 23792,
+          "cache_creation_tokens": 86594,
+          "cache_read_tokens": 711761
+        }
+      ]
+    },
+    {
+      "measured": 6.795065,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 77,
+          "input_tokens": 154,
+          "output_tokens": 66435,
+          "cache_creation_tokens": 117451,
+          "cache_read_tokens": 7576362
+        }
+      ]
+    },
+    {
+      "measured": 2.364983,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 31,
+          "input_tokens": 62,
+          "output_tokens": 29270,
+          "cache_creation_tokens": 58697,
+          "cache_read_tokens": 2084742
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 16.251023999999997,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": null,
+          "requests": 18,
+          "input_tokens": 36,
+          "output_tokens": 80,
+          "cache_creation_tokens": 83078,
+          "cache_read_tokens": 760703
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 96,
+          "input_tokens": 192,
+          "output_tokens": 125436,
+          "cache_creation_tokens": 275217,
+          "cache_read_tokens": 16042297
+        }
+      ]
+    },
+    {
+      "measured": 24.97072074999999,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 65,
+          "input_tokens": 12667,
+          "output_tokens": 239115,
+          "cache_creation_tokens": 402131,
+          "cache_read_tokens": 16762269
+        }
+      ]
+    },
+    {
+      "measured": 4.7339295,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 39,
+          "input_tokens": 78,
+          "output_tokens": 51511,
+          "cache_creation_tokens": 125832,
+          "cache_read_tokens": 4188580
+        }
+      ]
+    },
+    {
+      "measured": 5.568553749999999,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 30,
+          "input_tokens": 840,
+          "output_tokens": 47657,
+          "cache_creation_tokens": 110434,
+          "cache_read_tokens": 3030442
+        }
+      ]
+    },
+    {
+      "measured": 7.067617000000001,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 32,
+          "output_tokens": 3,
+          "cache_creation_tokens": 1931,
+          "cache_read_tokens": 61330
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 38,
+          "input_tokens": 1126,
+          "output_tokens": 58404,
+          "cache_creation_tokens": 144932,
+          "cache_read_tokens": 4196929
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 2.4545425,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 23,
+          "input_tokens": 46,
+          "output_tokens": 18349,
+          "cache_creation_tokens": 87103,
+          "cache_read_tokens": 2245075
+        }
+      ]
+    },
+    {
+      "measured": 20.662095749999995,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 42,
+          "input_tokens": 1254,
+          "output_tokens": 171109,
+          "cache_creation_tokens": 440354,
+          "cache_read_tokens": 11461416
+        }
+      ]
+    },
+    {
+      "measured": 3.315178999999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 39,
+          "input_tokens": 78,
+          "output_tokens": 23090,
+          "cache_creation_tokens": 88030,
+          "cache_read_tokens": 3557476
+        }
+      ]
+    },
+    {
+      "measured": 2.02455,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 15,
+          "input_tokens": 420,
+          "output_tokens": 10445,
+          "cache_creation_tokens": 56444,
+          "cache_read_tokens": 1073604
+        }
+      ]
+    },
+    {
+      "measured": 4.112010499999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 40,
+          "input_tokens": 80,
+          "output_tokens": 29260,
+          "cache_creation_tokens": 117794,
+          "cache_read_tokens": 4396039
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0.002241,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 1.534415,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 22,
+          "input_tokens": 44,
+          "output_tokens": 14085,
+          "cache_creation_tokens": 50062,
+          "cache_read_tokens": 1360794
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 6.974706000000001,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 31,
+          "input_tokens": 6522,
+          "output_tokens": 60939,
+          "cache_creation_tokens": 144998,
+          "cache_read_tokens": 3556631
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 1.3159125,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 19,
+          "input_tokens": 38,
+          "output_tokens": 10574,
+          "cache_creation_tokens": 46052,
+          "cache_read_tokens": 1177123
+        }
+      ]
+    },
+    {
+      "measured": 3.8944382000000006,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 32,
+          "input_tokens": 64,
+          "output_tokens": 40986,
+          "cache_creation_tokens": 101382,
+          "cache_read_tokens": 2653629
+        }
+      ]
+    },
+    {
+      "measured": 9.917388500000003,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 85,
+          "input_tokens": 170,
+          "output_tokens": 77294,
+          "cache_creation_tokens": 224215,
+          "cache_read_tokens": 8824415
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 3.8126975000000005,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 25,
+          "input_tokens": 50,
+          "output_tokens": 37454,
+          "cache_creation_tokens": 148503,
+          "cache_read_tokens": 2573711
+        }
+      ]
+    },
+    {
+      "measured": 19.649004499999997,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 127,
+          "input_tokens": 3914,
+          "output_tokens": 142088,
+          "cache_creation_tokens": 298368,
+          "cache_read_tokens": 24998116
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 2.2389435000000004,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 17,
+          "input_tokens": 34,
+          "output_tokens": 25845,
+          "cache_creation_tokens": 83344,
+          "cache_read_tokens": 1375739
+        }
+      ]
+    },
+    {
+      "measured": 1.060765,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 8,
+          "input_tokens": 16,
+          "output_tokens": 8611,
+          "cache_creation_tokens": 50078,
+          "cache_read_tokens": 559538
+        }
+      ]
+    },
+    {
+      "measured": 7.373391499999999,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 68,
+          "input_tokens": 136,
+          "output_tokens": 65802,
+          "cache_creation_tokens": 147246,
+          "cache_read_tokens": 8160905
+        }
+      ]
+    },
+    {
+      "measured": 0.0020429999999999997,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 5.5845295,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 50,
+          "input_tokens": 100,
+          "output_tokens": 58792,
+          "cache_creation_tokens": 114037,
+          "cache_read_tokens": 5444348
+        }
+      ]
+    },
+    {
+      "measured": 0.797617,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 7,
+          "input_tokens": 14,
+          "output_tokens": 6171,
+          "cache_creation_tokens": 33070,
+          "cache_read_tokens": 390735
+        }
+      ]
+    },
+    {
+      "measured": 7.702109499999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 63,
+          "input_tokens": 126,
+          "output_tokens": 57271,
+          "cache_creation_tokens": 175797,
+          "cache_read_tokens": 8498334
+        }
+      ]
+    },
+    {
+      "measured": 0.6922539999999998,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 13,
+          "input_tokens": 26,
+          "output_tokens": 4652,
+          "cache_creation_tokens": 24890,
+          "cache_read_tokens": 583347
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 33.075515500000016,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 183,
+          "input_tokens": 366,
+          "output_tokens": 152261,
+          "cache_creation_tokens": 856954,
+          "cache_read_tokens": 39514666
+        }
+      ]
+    },
+    {
+      "measured": 3.2459420000000003,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 25,
+          "input_tokens": 50,
+          "output_tokens": 38902,
+          "cache_creation_tokens": 106403,
+          "cache_read_tokens": 2413918
+        }
+      ]
+    },
+    {
+      "measured": 0.3700725,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 3,
+          "input_tokens": 159,
+          "output_tokens": 1174,
+          "cache_creation_tokens": 14157,
+          "cache_read_tokens": 102706
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0.001155,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 7.480685999999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 69,
+          "input_tokens": 138,
+          "output_tokens": 61063,
+          "cache_creation_tokens": 147602,
+          "cache_read_tokens": 8559674
+        }
+      ]
+    },
+    {
+      "measured": 3.3636995,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 16,
+          "input_tokens": 422,
+          "output_tokens": 29965,
+          "cache_creation_tokens": 69922,
+          "cache_read_tokens": 1171110
+        }
+      ]
+    },
+    {
+      "measured": 7.615187750000001,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 28,
+          "input_tokens": 5784,
+          "output_tokens": 72666,
+          "cache_creation_tokens": 150586,
+          "cache_read_tokens": 3359250
+        }
+      ]
+    },
+    {
+      "measured": 2.0856654999999997,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 9,
+          "input_tokens": 258,
+          "output_tokens": 16694,
+          "cache_creation_tokens": 52716,
+          "cache_read_tokens": 563400
+        }
+      ]
+    },
+    {
+      "measured": 8.134954,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 43,
+          "input_tokens": 86,
+          "output_tokens": 91026,
+          "cache_creation_tokens": 311547,
+          "cache_read_tokens": 4527758
+        }
+      ]
+    },
+    {
+      "measured": 4.486377999999998,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 47,
+          "input_tokens": 94,
+          "output_tokens": 32979,
+          "cache_creation_tokens": 119382,
+          "cache_read_tokens": 4795323
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0.9203950000000001,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 5,
+          "input_tokens": 10,
+          "output_tokens": 1450,
+          "cache_creation_tokens": 69981,
+          "cache_read_tokens": 364244
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 7.125528250000002,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 24,
+          "input_tokens": 2490,
+          "output_tokens": 64890,
+          "cache_creation_tokens": 157748,
+          "cache_read_tokens": 2465578
+        }
+      ]
+    },
+    {
+      "measured": 11.070284000000003,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 108,
+          "input_tokens": 216,
+          "output_tokens": 90609,
+          "cache_creation_tokens": 180105,
+          "cache_read_tokens": 13572122
+        }
+      ]
+    },
+    {
+      "measured": 1.533251,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 14,
+          "input_tokens": 28,
+          "output_tokens": 12036,
+          "cache_creation_tokens": 61943,
+          "cache_read_tokens": 1087967
+        }
+      ]
+    },
+    {
+      "measured": 1.9843075,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 18,
+          "input_tokens": 36,
+          "output_tokens": 16029,
+          "cache_creation_tokens": 75958,
+          "cache_read_tokens": 1519966
+        }
+      ]
+    },
+    {
+      "measured": 0.872154,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 6,
+          "input_tokens": 12,
+          "output_tokens": 9267,
+          "cache_creation_tokens": 36931,
+          "cache_read_tokens": 323847
+        }
+      ]
+    },
+    {
+      "measured": 19.130247500000003,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 147,
+          "input_tokens": 294,
+          "output_tokens": 141956,
+          "cache_creation_tokens": 241848,
+          "cache_read_tokens": 24882625
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 5.36571975,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 44,
+          "input_tokens": 1290,
+          "output_tokens": 142651,
+          "cache_creation_tokens": 443247,
+          "cache_read_tokens": 12355182
+        }
+      ]
+    },
+    {
+      "measured": 15.155797999999999,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 45,
+          "input_tokens": 19325,
+          "output_tokens": 152852,
+          "cache_creation_tokens": 253615,
+          "cache_read_tokens": 7887128
+        }
+      ]
+    },
+    {
+      "measured": 13.516041749999998,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": null,
+          "requests": 2,
+          "input_tokens": 64,
+          "output_tokens": 6,
+          "cache_creation_tokens": 18592,
+          "cache_read_tokens": 253246
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 26,
+          "input_tokens": 742,
+          "output_tokens": 101457,
+          "cache_creation_tokens": 365752,
+          "cache_read_tokens": 3551575
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 1.40532775,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 4,
+          "input_tokens": 98,
+          "output_tokens": 1895,
+          "cache_creation_tokens": 61954,
+          "cache_read_tokens": 274307
+        }
+      ]
+    },
+    {
+      "measured": 9.00714375,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 23,
+          "input_tokens": 9229,
+          "output_tokens": 73784,
+          "cache_creation_tokens": 209222,
+          "cache_read_tokens": 3770910
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 6.9493995,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 27,
+          "input_tokens": 3190,
+          "output_tokens": 66182,
+          "cache_creation_tokens": 137547,
+          "cache_read_tokens": 2553758
+        }
+      ]
+    },
+    {
+      "measured": 6.67522625,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 29,
+          "input_tokens": 12310,
+          "output_tokens": 44465,
+          "cache_creation_tokens": 166734,
+          "cache_read_tokens": 3685248
+        }
+      ]
+    },
+    {
+      "measured": 2.11535675,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 13,
+          "input_tokens": 386,
+          "output_tokens": 10370,
+          "cache_creation_tokens": 63651,
+          "cache_read_tokens": 935187
+        }
+      ]
+    },
+    {
+      "measured": 7.960078499999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 58,
+          "input_tokens": 116,
+          "output_tokens": 75027,
+          "cache_creation_tokens": 164986,
+          "cache_read_tokens": 8261538
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0.0009480000000000001,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0.8053647500000001,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 1,
+          "input_tokens": 2,
+          "output_tokens": 358,
+          "cache_creation_tokens": 38989,
+          "cache_read_tokens": 26351
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 13.1347749,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 28,
+          "input_tokens": 5338,
+          "output_tokens": 110912,
+          "cache_creation_tokens": 277423,
+          "cache_read_tokens": 4700576
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 10,
+          "output_tokens": 1,
+          "cache_creation_tokens": 16148,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "speed": "standard",
+          "requests": 11,
+          "input_tokens": 88,
+          "output_tokens": 4782,
+          "cache_creation_tokens": 48222,
+          "cache_read_tokens": 394148
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 2.3995055,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 20,
+          "input_tokens": 40,
+          "output_tokens": 32806,
+          "cache_creation_tokens": 71973,
+          "cache_read_tokens": 1579460
+        }
+      ]
+    },
+    {
+      "measured": 8.94977875,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 27,
+          "input_tokens": 6230,
+          "output_tokens": 62131,
+          "cache_creation_tokens": 241093,
+          "cache_read_tokens": 3289631
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 75.48157579999996,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 56,
+          "output_tokens": 2,
+          "cache_creation_tokens": 28380,
+          "cache_read_tokens": 102949
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 162,
+          "input_tokens": 18764,
+          "output_tokens": 306971,
+          "cache_creation_tokens": 956129,
+          "cache_read_tokens": 45477713
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": null,
+          "requests": 5,
+          "input_tokens": 10,
+          "output_tokens": 60,
+          "cache_creation_tokens": 4676,
+          "cache_read_tokens": 615022
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 158,
+          "input_tokens": 316,
+          "output_tokens": 132250,
+          "cache_creation_tokens": 650799,
+          "cache_read_tokens": 14726618
+        },
+        {
+          "model": "claude-sonnet-5",
+          "speed": null,
+          "requests": 5,
+          "input_tokens": 10,
+          "output_tokens": 52,
+          "cache_creation_tokens": 8546,
+          "cache_read_tokens": 368003
+        },
+        {
+          "model": "claude-sonnet-5",
+          "speed": "standard",
+          "requests": 245,
+          "input_tokens": 490,
+          "output_tokens": 256950,
+          "cache_creation_tokens": 1177983,
+          "cache_read_tokens": 17428435
+        }
+      ]
+    },
+    {
+      "measured": 0.5870431999999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 4,
+          "input_tokens": 8,
+          "output_tokens": 1630,
+          "cache_creation_tokens": 25231,
+          "cache_read_tokens": 175427
+        },
+        {
+          "model": "claude-sonnet-5",
+          "speed": null,
+          "requests": 3,
+          "input_tokens": 6,
+          "output_tokens": 10,
+          "cache_creation_tokens": 5983,
+          "cache_read_tokens": 56202
+        },
+        {
+          "model": "claude-sonnet-5",
+          "speed": "standard",
+          "requests": 3,
+          "input_tokens": 6,
+          "output_tokens": 2017,
+          "cache_creation_tokens": 30054,
+          "cache_read_tokens": 43348
+        }
+      ]
+    },
+    {
+      "measured": 3.63210875,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 20,
+          "input_tokens": 2251,
+          "output_tokens": 30076,
+          "cache_creation_tokens": 83130,
+          "cache_read_tokens": 1467951
+        }
+      ]
+    },
+    {
+      "measured": 8.118889500000002,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 37,
+          "input_tokens": 3410,
+          "output_tokens": 76547,
+          "cache_creation_tokens": 154999,
+          "cache_read_tokens": 4101571
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 9.314799750000004,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": null,
+          "requests": 36,
+          "input_tokens": 72,
+          "output_tokens": 123,
+          "cache_creation_tokens": 126022,
+          "cache_read_tokens": 1471660
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 44,
+          "input_tokens": 88,
+          "output_tokens": 65640,
+          "cache_creation_tokens": 224121,
+          "cache_read_tokens": 3881456
+        }
+      ]
+    },
+    {
+      "measured": 4.160206499999999,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 32,
+          "output_tokens": 3,
+          "cache_creation_tokens": 1931,
+          "cache_read_tokens": 61330
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 21,
+          "input_tokens": 612,
+          "output_tokens": 33587,
+          "cache_creation_tokens": 102921,
+          "cache_read_tokens": 1656998
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0.1435955,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 1,
+          "input_tokens": 2,
+          "output_tokens": 7,
+          "cache_creation_tokens": 6731,
+          "cache_read_tokens": 30626
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 1.274696,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 8,
+          "input_tokens": 16,
+          "output_tokens": 13342,
+          "cache_creation_tokens": 49887,
+          "cache_read_tokens": 508747
+        }
+      ]
+    },
+    {
+      "measured": 5.069138,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 18,
+          "input_tokens": 1819,
+          "output_tokens": 38290,
+          "cache_creation_tokens": 127951,
+          "cache_read_tokens": 2047618
+        }
+      ]
+    },
+    {
+      "measured": 2.5430775000000003,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 30,
+          "input_tokens": 60,
+          "output_tokens": 27968,
+          "cache_creation_tokens": 74080,
+          "cache_read_tokens": 2061204
+        }
+      ]
+    },
+    {
+      "measured": 2.60198,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 28,
+          "input_tokens": 56,
+          "output_tokens": 18686,
+          "cache_creation_tokens": 75585,
+          "cache_read_tokens": 2488300
+        }
+      ]
+    },
+    {
+      "measured": 1.8743145,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 18,
+          "input_tokens": 36,
+          "output_tokens": 17337,
+          "cache_creation_tokens": 69866,
+          "cache_read_tokens": 1479643
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 10.140035249999995,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 7,
+          "input_tokens": 194,
+          "output_tokens": 6172,
+          "cache_creation_tokens": 138278,
+          "cache_read_tokens": 989085
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 73,
+          "input_tokens": 146,
+          "output_tokens": 51387,
+          "cache_creation_tokens": 125144,
+          "cache_read_tokens": 7865428
+        }
+      ]
+    },
+    {
+      "measured": 3.135274499999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 36,
+          "input_tokens": 72,
+          "output_tokens": 35214,
+          "cache_creation_tokens": 76021,
+          "cache_read_tokens": 2826787
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 3.3096750000000004,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 13,
+          "input_tokens": 2830,
+          "output_tokens": 28309,
+          "cache_creation_tokens": 78504,
+          "cache_read_tokens": 968333
+        }
+      ]
+    },
+    {
+      "measured": 5.091476000000001,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 25,
+          "input_tokens": 710,
+          "output_tokens": 42490,
+          "cache_creation_tokens": 109936,
+          "cache_read_tokens": 2423665
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 8.836618999999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 87,
+          "input_tokens": 174,
+          "output_tokens": 74595,
+          "cache_creation_tokens": 172671,
+          "cache_read_tokens": 9967550
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 8.896679249999998,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 67,
+          "input_tokens": 4726,
+          "output_tokens": 71613,
+          "cache_creation_tokens": 153228,
+          "cache_read_tokens": 8812509
+        }
+      ]
+    },
+    {
+      "measured": 12.248643750000003,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 32,
+          "input_tokens": 7598,
+          "output_tokens": 107496,
+          "cache_creation_tokens": 259129,
+          "cache_read_tokens": 5712096
+        }
+      ]
+    },
+    {
+      "measured": 27.368853249999994,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 66,
+          "input_tokens": 11955,
+          "output_tokens": 260658,
+          "cache_creation_tokens": 500732,
+          "cache_read_tokens": 12156139
+        }
+      ]
+    },
+    {
+      "measured": 0.000458,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 2.4589825000000003,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 17,
+          "input_tokens": 34,
+          "output_tokens": 36719,
+          "cache_creation_tokens": 80693,
+          "cache_read_tokens": 1462327
+        }
+      ]
+    },
+    {
+      "measured": 4.149908999999999,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 20,
+          "input_tokens": 5128,
+          "output_tokens": 34812,
+          "cache_creation_tokens": 93919,
+          "cache_read_tokens": 1713262
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 6.7846860000000015,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 16,
+          "input_tokens": 10877,
+          "output_tokens": 60144,
+          "cache_creation_tokens": 155049,
+          "cache_read_tokens": 1943320
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 20.19513675,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 34,
+          "input_tokens": 12652,
+          "output_tokens": 167980,
+          "cache_creation_tokens": 489488,
+          "cache_read_tokens": 5147400
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 16.322826,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 30,
+          "input_tokens": 3987,
+          "output_tokens": 149288,
+          "cache_creation_tokens": 372220,
+          "cache_read_tokens": 4873989
+        }
+      ]
+    },
+    {
+      "measured": 3.2101159999999997,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 40,
+          "input_tokens": 80,
+          "output_tokens": 32573,
+          "cache_creation_tokens": 72707,
+          "cache_read_tokens": 3162674
+        }
+      ]
+    },
+    {
+      "measured": 9.288335249999998,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 46,
+          "input_tokens": 1382,
+          "output_tokens": 85465,
+          "cache_creation_tokens": 173683,
+          "cache_read_tokens": 5207018
+        }
+      ]
+    },
+    {
+      "measured": 10.015684,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 32,
+          "input_tokens": 13097,
+          "output_tokens": 96625,
+          "cache_creation_tokens": 193635,
+          "cache_read_tokens": 4373386
+        }
+      ]
+    },
+    {
+      "measured": 9.15781275,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 23,
+          "input_tokens": 10726,
+          "output_tokens": 95377,
+          "cache_creation_tokens": 168927,
+          "cache_read_tokens": 3237895
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 18.531835750000003,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 31,
+          "input_tokens": 902,
+          "output_tokens": 63605,
+          "cache_creation_tokens": 306027,
+          "cache_read_tokens": 8120186
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 66,
+          "input_tokens": 132,
+          "output_tokens": 35438,
+          "cache_creation_tokens": 163280,
+          "cache_read_tokens": 9125354
+        }
+      ]
+    },
+    {
+      "measured": 2.2587180000000004,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 23,
+          "input_tokens": 46,
+          "output_tokens": 15496,
+          "cache_creation_tokens": 80063,
+          "cache_read_tokens": 2010079
+        }
+      ]
+    },
+    {
+      "measured": 2.696122,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 23,
+          "input_tokens": 46,
+          "output_tokens": 38414,
+          "cache_creation_tokens": 80533,
+          "cache_read_tokens": 1856050
+        }
+      ]
+    },
+    {
+      "measured": 1.2558635,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 7,
+          "input_tokens": 792,
+          "output_tokens": 5902,
+          "cache_creation_tokens": 42214,
+          "cache_read_tokens": 430190
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 8.14836175,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 25,
+          "input_tokens": 740,
+          "output_tokens": 59418,
+          "cache_creation_tokens": 223583,
+          "cache_read_tokens": 2785227
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 9.00714375,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 23,
+          "input_tokens": 9229,
+          "output_tokens": 73784,
+          "cache_creation_tokens": 209222,
+          "cache_read_tokens": 3770910
+        }
+      ]
+    },
+    {
+      "measured": 6.103431499999999,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 41,
+          "input_tokens": 82,
+          "output_tokens": 71761,
+          "cache_creation_tokens": 153526,
+          "cache_read_tokens": 5334764
+        }
+      ]
+    },
+    {
+      "measured": 1.2111014999999998,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 10,
+          "input_tokens": 20,
+          "output_tokens": 7361,
+          "cache_creation_tokens": 57966,
+          "cache_read_tokens": 789708
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 3.5128855000000008,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 33,
+          "input_tokens": 66,
+          "output_tokens": 34831,
+          "cache_creation_tokens": 109993,
+          "cache_read_tokens": 3079785
+        }
+      ]
+    },
+    {
+      "measured": 8.585652800000004,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 130,
+          "input_tokens": 260,
+          "output_tokens": 92113,
+          "cache_creation_tokens": 361471,
+          "cache_read_tokens": 14537827
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 30,
+          "input_tokens": 60,
+          "output_tokens": 29354,
+          "cache_creation_tokens": 99150,
+          "cache_read_tokens": 2397412
+        }
+      ]
+    },
+    {
+      "measured": 0,
+      "tiers": [],
+      "tokens": []
+    },
+    {
+      "measured": 2.6269055000000003,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 31,
+          "input_tokens": 62,
+          "output_tokens": 25540,
+          "cache_creation_tokens": 76696,
+          "cache_read_tokens": 2303383
+        }
+      ]
+    },
+    {
+      "measured": 0.8710739999999999,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 10,
+          "input_tokens": 20,
+          "output_tokens": 7893,
+          "cache_creation_tokens": 35531,
+          "cache_read_tokens": 550157
+        }
+      ]
+    },
+    {
+      "measured": 14.901182499999997,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "<synthetic>",
+          "speed": null,
+          "requests": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 0
+        },
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 112,
+          "input_tokens": 224,
+          "output_tokens": 98375,
+          "cache_creation_tokens": 252118,
+          "cache_read_tokens": 19834747
+        }
+      ]
+    },
+    {
+      "measured": 5.080000999999998,
+      "tiers": [
+        "claude-opus-5[1m]"
+      ],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 50,
+          "input_tokens": 100,
+          "output_tokens": 39312,
+          "cache_creation_tokens": 117098,
+          "cache_read_tokens": 5161631
+        }
+      ]
+    },
+    {
+      "measured": 6.124224000000001,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-opus-5",
+          "speed": "standard",
+          "requests": 43,
+          "input_tokens": 86,
+          "output_tokens": 59659,
+          "cache_creation_tokens": 244034,
+          "cache_read_tokens": 3650855
+        }
+      ]
+    },
+    {
+      "measured": 2.4478027500000006,
+      "tiers": [],
+      "tokens": [
+        {
+          "model": "claude-fable-5-1",
+          "speed": "standard",
+          "requests": 12,
+          "input_tokens": 1819,
+          "output_tokens": 15051,
+          "cache_creation_tokens": 66119,
+          "cache_read_tokens": 799849
+        }
+      ]
+    }
+  ]
+}

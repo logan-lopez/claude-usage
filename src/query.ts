@@ -74,6 +74,8 @@ export interface SessionDetail {
   byPlugin: BreakdownRow[];
   byTool: { key: string; calls: number }[];
   blocks: (TokenTotals & { api_block_index: number | null; first_ts: string | null; last_ts: string | null })[];
+  apiBlockCount: number;
+  subAgents: BreakdownRow[];
   main: TokenTotals;
   sidechain: TokenTotals;
   /** cost-state ground truth, per model. Empty when the session predates it. */
@@ -202,6 +204,9 @@ export function getSession(db: Database, sessionId: string): SessionDetail | nul
           GROUP BY api_block_index ORDER BY api_block_index`,
       )
       .all(sessionId) as SessionDetail["blocks"],
+    apiBlockCount: (db.query("SELECT COUNT(DISTINCT api_block_index) n FROM requests WHERE session_id=?").get(sessionId) as { n: number }).n,
+    subAgents: db.query(`SELECT COALESCE(agent_id, attribution_agent) key, ${TOTALS_SELECT} FROM requests
+      WHERE session_id=? AND attribution_agent IS NOT NULL GROUP BY COALESCE(agent_id, attribution_agent) ORDER BY total_tokens DESC`).all(sessionId) as BreakdownRow[],
     main: half("is_sidechain = 0"),
     sidechain: half("is_sidechain = 1"),
     costModels,
@@ -209,7 +214,7 @@ export function getSession(db: Database, sessionId: string): SessionDetail | nul
   };
 }
 
-export interface SessionsOptions {
+export interface SessionsOptions extends RequestFilters {
   since?: number | null;
   by?: "project" | "model" | "entrypoint" | "branch" | null;
   limit?: number;
@@ -217,17 +222,19 @@ export interface SessionsOptions {
 }
 
 export function listSessions(db: Database, opts: SessionsOptions = {}): SessionRow[] {
-  const { since = null, limit = 30, project = null } = opts;
+  const { since = null, until = null, limit = 30, project = null, model = null } = opts;
   return db
     .query(
       `${SESSION_SELECT}
         WHERE COALESCE(r.requests, 0) > 0
           AND ($since IS NULL OR s.last_ts_ms >= $since)
-          AND ($project IS NULL OR s.project = $project)
+          AND ($until IS NULL OR s.last_ts_ms < $until)
+          AND ($project IS NULL OR instr(lower(COALESCE(s.project,'')), lower($project)) > 0)
+          AND ($model IS NULL OR EXISTS (SELECT 1 FROM requests mr WHERE mr.session_id=s.session_id AND instr(lower(COALESCE(mr.model,'')), lower($model)) > 0))
         ORDER BY s.last_ts_ms DESC
         LIMIT $limit`,
     )
-    .all({ $since: since, $project: project, $limit: limit }) as SessionRow[];
+    .all({ $since: since, $until: until, $project: project, $model: model, $limit: limit }) as SessionRow[];
 }
 
 /**
@@ -249,59 +256,24 @@ export function groupSessions(
   by: NonNullable<SessionsOptions["by"]>,
   opts: SessionsOptions = {},
 ): GroupRow[] {
-  const { since = null } = opts;
-  const column = {
-    project: "project",
-    model: "model",
-    entrypoint: "entrypoint",
-    branch: "git_branch",
-  }[by];
-
-  const KEYED = `
-    keyed AS (
-      SELECT *, COALESCE(${column}, '(unknown)') AS gkey FROM requests
-       WHERE ($since IS NULL OR ts_ms >= $since)
-    )`;
-
-  const totals = db
-    .query(
-      `WITH ${KEYED}
-       SELECT gkey AS key, COUNT(DISTINCT session_id) AS sessions, ${TOTALS_SELECT}
-         FROM keyed GROUP BY gkey ORDER BY total_tokens DESC`,
-    )
-    .all({ $since: since }) as (GroupRow & { key: string })[];
-
-  const costs = db
-    .query(
-      `WITH ${KEYED},
-        sess_groups AS (SELECT session_id, COUNT(DISTINCT gkey) AS ngroups FROM keyed GROUP BY session_id),
-        sess_key    AS (SELECT DISTINCT session_id, gkey FROM keyed)
-       SELECT sk.gkey AS key,
-              COALESCE(SUM(CASE WHEN sg.ngroups = 1 AND s.total_cost_usd IS NOT NULL
-                                THEN s.total_cost_usd ELSE 0 END), 0) AS cost_usd,
-              SUM(CASE WHEN sg.ngroups > 1 THEN 1 ELSE 0 END) AS sessions_split,
-              SUM(CASE WHEN sg.ngroups = 1 AND s.total_cost_usd IS NULL THEN 1 ELSE 0 END) AS sessions_unpriced
-         FROM sess_key sk
-         JOIN sess_groups sg ON sg.session_id = sk.session_id
-         LEFT JOIN sessions s ON s.session_id = sk.session_id
-        GROUP BY sk.gkey`,
-    )
-    .all({ $since: since }) as {
-      key: string; cost_usd: number; sessions_split: number; sessions_unpriced: number;
-    }[];
-
-  const byKey = new Map(costs.map((c) => [c.key, c]));
-  return totals.map((t) => {
-    const c = byKey.get(t.key);
-    const split = c?.sessions_split ?? 0;
-    const unpriced = c?.sessions_unpriced ?? 0;
-    return {
-      ...t,
-      cost_usd: c?.cost_usd ?? 0,
-      sessions_split: split,
-      sessions_unpriced: unpriced,
-      cost_complete: split === 0 && unpriced === 0,
-    };
+  const column = { project: "project", model: "model", entrypoint: "entrypoint", branch: "git_branch" }[by];
+  if (!column) throw new Error("invalid session grouping");
+  const w = requestWhere(opts);
+  const totals = db.query(`SELECT COALESCE(${column}, '(unknown)') key, COUNT(DISTINCT session_id) sessions,
+    ${TOTALS_SELECT} FROM requests WHERE ${w.sql} GROUP BY ${column} ORDER BY total_tokens DESC`).all(w.params) as GroupRow[];
+  const memberships = db.query(`SELECT DISTINCT session_id, COALESCE(${column}, '(unknown)') key FROM requests WHERE ${w.sql}`).all(w.params) as { session_id: string; key: string }[];
+  const costs = new Map<string, ReturnType<typeof exactSessionCost>>();
+  for (const id of new Set(memberships.map(r => r.session_id))) {
+    const all = db.query(`SELECT COUNT(*) n, COUNT(DISTINCT COALESCE(${column}, '(unknown)')) groups FROM requests WHERE session_id=$id`).get({ $id: id }) as { n: number; groups: number };
+    const selected = db.query(`SELECT COUNT(*) n FROM requests WHERE session_id=$id AND ${w.sql}`).get({ ...w.params, $id: id }) as { n: number };
+    const cost = db.query("SELECT total_cost_usd FROM sessions WHERE session_id=?").get(id) as { total_cost_usd: number | null } | null;
+    costs.set(id, exactSessionCost(cost?.total_cost_usd ?? null, all.groups, all.n === selected.n));
+  }
+  return totals.map(t => {
+    const parts = memberships.filter(r => r.key === t.key).map(r => costs.get(r.session_id)!);
+    return { ...t, cost_usd: parts.reduce((n, r) => n + r.cost_usd, 0),
+      sessions_split: parts.reduce((n, r) => n + r.sessions_split, 0),
+      sessions_unpriced: parts.reduce((n, r) => n + r.sessions_unpriced, 0), cost_complete: parts.every(r => r.cost_complete) };
   });
 }
 
@@ -736,4 +708,413 @@ export function archiveStats(db: Database) {
     lastTs: one<{ t: string | null }>("SELECT MAX(ts) t FROM requests").t,
     totals: corpusTotals(db),
   };
+}
+
+/* ------------------------------------------ shared filtered CLI reports -- */
+export interface RequestFilters {
+  since?: number | null;
+  until?: number | null;
+  project?: string | null;
+  model?: string | null;
+  limit?: number;
+}
+function requestWhere(opts: RequestFilters, alias = "") {
+  const p = alias ? `${alias}.` : "";
+  return {
+    sql: `($since IS NULL OR ${p}ts_ms >= $since) AND ($until IS NULL OR ${p}ts_ms < $until)
+      AND ($project IS NULL OR instr(lower(COALESCE(${p}project,'')), lower($project)) > 0)
+      AND ($model IS NULL OR instr(lower(COALESCE(${p}model,'')), lower($model)) > 0)`,
+    params: { $since: opts.since ?? null, $until: opts.until ?? null,
+      $project: opts.project ?? null, $model: opts.model ?? null },
+  };
+}
+export interface Coverage { total: number; attributed: number; unattributed: number; percent: number; }
+export function coverage(total: number, attributed: number): Coverage {
+  return { total, attributed, unattributed: total - attributed, percent: total ? attributed / total * 100 : 0 };
+}
+function reportMeta(db: Database, opts: RequestFilters) {
+  const w = requestWhere(opts);
+  const r = db.query(`SELECT COUNT(*) total, MIN(ts_ms) firstTsMs, MAX(ts_ms) lastTsMs FROM requests WHERE ${w.sql}`)
+    .get(w.params) as { total: number; firstTsMs: number | null; lastTsMs: number | null };
+  return { source: "local transcripts" as const, since: opts.since ?? null, until: opts.until ?? null, ...r };
+}
+export const ATTRIBUTION_COLUMNS = {
+  agent: "attribution_agent", skill: "attribution_skill", plugin: "attribution_plugin",
+  mcp: "attribution_mcp_server", effort: "effort", entrypoint: "entrypoint",
+  branch: "git_branch", version: "cc_version", model: "model",
+} as const;
+export type AttributionDimension = keyof typeof ATTRIBUTION_COLUMNS | "tool";
+export function attribution(db: Database, by: AttributionDimension, opts: RequestFilters = {}) {
+  const w = requestWhere(opts);
+  const meta = reportMeta(db, opts);
+  let rows: (BreakdownRow & { calls?: number })[];
+  let attributed: number;
+  if (by === "tool") {
+    // One request may carry several calls of one tool and several tools. The
+    // DISTINCT subquery keys on the full request primary key, so a request is
+    // counted once per tool it used and its tokens are never multiplied by the
+    // call count. Calls are counted separately because they are the one figure
+    // that legitimately exceeds the request count.
+    const pairs = `SELECT DISTINCT t.tool_name AS key, r.message_id, r.request_id, r.session_id,
+        r.input_tokens, r.output_tokens, r.thinking_tokens, r.cache_creation_tokens,
+        r.cache_read_tokens, r.ephemeral_5m, r.ephemeral_1h, r.total_tokens
+      FROM tool_calls t JOIN requests r ON r.session_id = t.session_id AND r.message_id = t.message_id
+      WHERE t.tool_name IS NOT NULL AND ${requestWhere(opts, "r").sql}`;
+    const tokens = db.query(`SELECT key, ${TOTALS_SELECT} FROM (${pairs}) GROUP BY key`)
+      .all(w.params) as BreakdownRow[];
+    const calls = new Map((db.query(`SELECT t.tool_name AS key, COUNT(*) AS n FROM tool_calls t
+      WHERE t.tool_name IS NOT NULL AND EXISTS (SELECT 1 FROM requests r
+        WHERE r.session_id = t.session_id AND r.message_id = t.message_id AND ${requestWhere(opts, "r").sql})
+      GROUP BY t.tool_name`).all(w.params) as { key: string; n: number }[]).map(r => [r.key, r.n]));
+    rows = tokens.map(row => ({ ...row, calls: calls.get(row.key) ?? 0 }));
+    // Requests reached by any tool at all: the sum of the rows above would
+    // double-count a request that used more than one tool.
+    attributed = (db.query(`SELECT COUNT(*) n FROM (SELECT DISTINCT r.message_id, r.request_id, r.session_id
+      FROM tool_calls t JOIN requests r ON r.session_id = t.session_id AND r.message_id = t.message_id
+      WHERE t.tool_name IS NOT NULL AND ${requestWhere(opts, "r").sql})`).get(w.params) as { n: number }).n;
+  } else {
+    const column = ATTRIBUTION_COLUMNS[by];
+    if (!column) throw new Error("invalid attribution dimension");
+    rows = db.query(`SELECT ${column} AS key, ${TOTALS_SELECT} FROM requests WHERE ${w.sql} AND ${column} IS NOT NULL
+      GROUP BY ${column} ORDER BY total_tokens DESC, key`).all(w.params) as BreakdownRow[];
+    attributed = rows.reduce((n, r) => n + r.requests, 0);
+  }
+  rows.sort((a, b) => b.total_tokens - a.total_tokens || a.key.localeCompare(b.key));
+  return { ...meta, by, coverage: coverage(meta.total, attributed), groups: rows.length,
+    overlapping: by === "tool", rows: rows.slice(0, opts.limit),
+    note: by === "tool" ? "Tool groups overlap: request tokens are context, not per-tool consumption." : null };
+}
+
+export type TimelineBucket = "day" | "week" | "month" | "auto";
+export function timeline(db: Database, opts: RequestFilters & { bucket?: TimelineBucket; by?: "model" | "project" | "effort" } = {}) {
+  const meta = reportMeta(db, opts);
+  const until = opts.until ?? Date.now();
+  const since = opts.since ?? meta.firstTsMs ?? until;
+  const bucket = opts.bucket ?? "day";
+  const bucketMs = bucket === "auto" ? chooseBucket(until - since) : null;
+  const start = (ms: number) => {
+    if (bucketMs) return Math.floor(ms / bucketMs) * bucketMs;
+    const d = new Date(ms); d.setUTCHours(0, 0, 0, 0);
+    if (bucket === "month") d.setUTCDate(1);
+    if (bucket === "week") d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+    return d.getTime();
+  };
+  const next = (ms: number) => {
+    if (bucketMs) return ms + bucketMs;
+    if (bucket !== "month") return ms + (bucket === "week" ? 7 : 1) * 86_400_000;
+    const d = new Date(ms); d.setUTCMonth(d.getUTCMonth() + 1); return d.getTime();
+  };
+  const w = requestWhere({ ...opts, since, until });
+  const expr = bucketMs ? `(ts_ms / ${bucketMs}) * ${bucketMs}` : bucket === "month"
+    ? "CAST(strftime('%s', ts_ms/1000, 'unixepoch', 'start of month') AS INTEGER)*1000"
+    : bucket === "week" ? "CAST(strftime('%s', ts_ms/1000, 'unixepoch', '-6 days', 'weekday 1', 'start of day') AS INTEGER)*1000"
+    : "CAST(strftime('%s', ts_ms/1000, 'unixepoch', 'start of day') AS INTEGER)*1000";
+  const column = opts.by && ["model", "project", "effort"].includes(opts.by) ? opts.by : null;
+  const data = db.query(`SELECT ${expr} tsMs, ${column ? `COALESCE(${column}, '(unknown)')` : "'all'"} key,
+    ${TOTALS_SELECT} FROM requests WHERE ${w.sql} GROUP BY tsMs, key ORDER BY tsMs, key`).all(w.params) as (BreakdownRow & { tsMs: number })[];
+  const keys = [...new Set(data.map(r => r.key))];
+  if (!keys.length) keys.push(column ? "(unknown)" : "all");
+  const indexed = new Map(data.map(r => [`${r.tsMs}:${r.key}`, r]));
+  const zero = db.query(`SELECT ${TOTALS_SELECT} FROM requests WHERE 0`).get() as TokenTotals;
+  const rows: (BreakdownRow & { tsMs: number })[] = [];
+  for (let t = start(since); t < until; t = next(t)) {
+    for (const key of keys) rows.push(indexed.get(`${t}:${key}`) ?? { ...zero, tsMs: t, key });
+    if (rows.length > 1_000_000) throw new Error("timeline exceeds one million rows; narrow --since/--until or use a coarser bucket");
+  }
+  const attributed = data.filter(r => r.key !== "(unknown)").reduce((n, r) => n + r.requests, 0);
+  return { ...meta, since, until, timezone: "UTC", bucket, bucketMs, by: column,
+    coverage: coverage(meta.total, attributed), buckets: rows.length, rows: rows.slice(0, opts.limit) };
+}
+
+export type ExportTable = "requests" | "sessions" | "tools" | "limits";
+export function exportRows(db: Database, table: ExportTable, opts: RequestFilters = {}) {
+  const name = { requests: "requests", sessions: "sessions", tools: "tool_calls", limits: "limit_samples" }[table];
+  if (!name) throw new Error("invalid export table");
+  const w = requestWhere(opts, "r");
+  let sql: string;
+  let params: Record<string, string | number | null> = w.params;
+  if (table === "requests") sql = `SELECT r.* FROM requests r WHERE ${w.sql} ORDER BY ts_ms, session_id, message_id, request_id`;
+  else if (table === "sessions") sql = `SELECT s.* FROM sessions s
+    WHERE ($since IS NULL OR s.last_ts_ms >= $since) AND ($until IS NULL OR s.last_ts_ms < $until)
+      AND ($project IS NULL OR instr(lower(COALESCE(s.project,'')), lower($project)) > 0)
+      AND ($model IS NULL OR EXISTS (SELECT 1 FROM requests r WHERE r.session_id=s.session_id AND instr(lower(COALESCE(r.model,'')), lower($model)) > 0))
+    ORDER BY last_ts_ms, session_id`;
+  else if (table === "tools") sql = `SELECT t.* FROM tool_calls t
+    WHERE ($since IS NULL OR t.ts_ms >= $since) AND ($until IS NULL OR t.ts_ms < $until)
+      AND (($project IS NULL AND $model IS NULL) OR EXISTS (SELECT 1 FROM requests r
+        WHERE r.session_id=t.session_id AND r.message_id=t.message_id
+          AND ($project IS NULL OR instr(lower(COALESCE(r.project,'')), lower($project)) > 0)
+          AND ($model IS NULL OR instr(lower(COALESCE(r.model,'')), lower($model)) > 0)))
+    ORDER BY ts_ms, session_id, tool_use_id`;
+  else {
+    if (opts.project || opts.model) throw new Error("limit samples cannot be filtered by project or model");
+    sql = "SELECT * FROM limit_samples WHERE ($since IS NULL OR ts_ms >= $since) AND ($until IS NULL OR ts_ms < $until) ORDER BY ts_ms, source";
+    params = { $since: opts.since ?? null, $until: opts.until ?? null };
+  }
+  if (opts.limit) { sql += " LIMIT $limit"; params.$limit = opts.limit; }
+  const columns = (db.query(`PRAGMA table_xinfo(${name})`).all() as { name: string }[]).map(r => r.name);
+  return { columns, rows: db.query(sql).iterate(params) as Iterable<Record<string, unknown>> };
+}
+
+/** Database-only health evidence. OS checks live in doctor.ts. */
+export function archiveHealth(db: Database) {
+  const newest = (table: string) => (db.query(`SELECT MAX(ts_ms) ts FROM ${table}`).get() as { ts: number | null }).ts;
+  return {
+    integrity: (db.query("PRAGMA integrity_check").all() as Record<string, string>[]).flatMap(Object.values),
+    newestRequest: newest("requests"), newestLimit: newest("limit_samples"),
+    trackedFiles: (db.query("SELECT path FROM ingest_state").all() as { path: string }[]).map(r => r.path),
+  };
+}
+
+/* ------------------------------------------------------- cost and cache -- */
+import { estimateRequest, normalizeModel, pricingSnapshot, type PriceInput } from "./pricing.ts";
+
+/** Shared exact-or-absent decision for all session-granularity cost views. */
+export function exactSessionCost(cost: number | null, groups: number, completeSelection = true) {
+  const split = groups > 1 || !completeSelection;
+  return { cost_usd: !split && cost !== null ? cost : 0,
+    sessions_split: split ? 1 : 0, sessions_unpriced: !split && cost === null ? 1 : 0,
+    cost_complete: !split && cost !== null };
+}
+interface PricedRequest extends PriceInput {
+  session_id: string; project: string | null; ts_ms: number | null;
+}
+function contextTiers(db: Database) {
+  const tiers = db.query("SELECT session_id, model FROM cost_state_models WHERE model LIKE '%[1m]'").all() as { session_id: string; model: string }[];
+  return new Set(tiers.map(r => `${r.session_id}:${normalizeModel(r.model).replace('[1m]', '')}`));
+}
+function withTier(row: PricedRequest, tiers: Set<string>): PricedRequest {
+  return tiers.has(`${row.session_id}:${normalizeModel(row.model ?? '')}`) ? { ...row, model: `${row.model}[1m]` } : row;
+}
+export interface CostRow {
+  key: string; basis: "measured" | "estimated"; source: string; sessions: number; requests: number;
+  cost_usd: number; cost_complete: boolean; sessions_split: number; sessions_unpriced: number;
+  priced_requests: number; unpriced_requests: number; unknown_tier_requests: number; reasons: string[];
+}
+export function cost(db: Database, opts: RequestFilters & { by?: "model" | "project" | "session" | "day"; basis?: "measured" | "estimated" } = {}) {
+  const by = opts.by ?? "model";
+  const meta = reportMeta(db, opts);
+  const tiers = contextTiers(db);
+  const w = requestWhere(opts);
+  const selected = (db.query(`SELECT * FROM requests WHERE ${w.sql}`).all(w.params) as PricedRequest[]).map(r => withTier(r, tiers));
+  const key = (row: PricedRequest) => by === "model" ? row.model ?? "(unknown)" : by === "project" ? row.project ?? "(unknown)" : by === "session" ? row.session_id : row.ts_ms === null ? "(unknown)" : new Date(row.ts_ms).toISOString().slice(0, 10);
+  const sessions = new Map((db.query("SELECT session_id, total_cost_usd FROM sessions").all() as { session_id: string; total_cost_usd: number | null }[]).map(r => [r.session_id, r.total_cost_usd]));
+  const selectedBySession = new Map<string, PricedRequest[]>();
+  for (const row of selected) { const rs = selectedBySession.get(row.session_id) ?? []; rs.push(row); selectedBySession.set(row.session_id, rs); }
+  const grouped = new Map<string, CostRow>();
+  let measuredRequests = 0;
+  const get = (group: string, basis: CostRow["basis"]) => {
+    const id = `${basis}:${group}`;
+    if (!grouped.has(id)) grouped.set(id, { key: group, basis, source: basis === "measured" ? "cumulative session cost-state (keep-max)" : "token estimate / committed pricing snapshot",
+      sessions: 0, requests: 0, cost_usd: 0, cost_complete: true, sessions_split: 0, sessions_unpriced: 0,
+      priced_requests: 0, unpriced_requests: 0, unknown_tier_requests: 0, reasons: [] });
+    return grouped.get(id)!;
+  };
+  for (const [id, requests] of selectedBySession) {
+    const measured = sessions.get(id) ?? null;
+    if (measured !== null) measuredRequests += requests.length;
+    const basis = measured !== null ? "measured" : "estimated";
+    if (opts.basis && opts.basis !== basis) continue;
+    const groups = new Set(requests.map(key));
+    if (basis === "estimated") {
+      for (const group of groups) get(group, basis).sessions++;
+      for (const request of requests) {
+        const row = get(key(request), basis); row.requests++; row.unknown_tier_requests++;
+        const estimate = estimateRequest(request);
+        if (estimate.usd === null) { row.unpriced_requests++; row.cost_complete = false; if (!row.reasons.includes(estimate.reason!)) row.reasons.push(estimate.reason!); }
+        else { row.cost_usd += estimate.usd; row.priced_requests++; }
+      }
+    } else {
+      // A cumulative measurement is not a spend-in-window value. Compare all
+      // requests, not just filtered ones, before assigning a session total.
+      const all = (db.query("SELECT * FROM requests WHERE session_id=?").all(id) as PricedRequest[]).map(r => withTier(r, tiers));
+      const allGroups = new Set(all.map(key));
+      const exact = exactSessionCost(measured, allGroups.size, all.length === requests.length);
+      for (const group of groups) {
+        const row = get(group, basis); row.sessions++;
+        row.requests += requests.filter(r => key(r) === group).length;
+        row.cost_usd += exact.cost_usd; row.sessions_split += exact.sessions_split;
+        row.cost_complete &&= exact.cost_complete;
+      }
+    }
+  }
+  const rows = [...grouped.values()].sort((a, b) => a.basis.localeCompare(b.basis) || b.cost_usd - a.cost_usd || a.key.localeCompare(b.key));
+  const totals = { measured: rows.filter(r => r.basis === "measured").reduce((n, r) => n + r.cost_usd, 0), estimated: rows.filter(r => r.basis === "estimated").reduce((n, r) => n + r.cost_usd, 0) };
+  return { ...meta, by, coverage: coverage(meta.total, selected.filter(r => key(r) !== "(unknown)").length),
+    measuredCoverage: coverage(meta.total, measuredRequests), pricing: pricingSnapshot,
+    note: "Measured and estimated amounts are separate. + excludes split/partially selected sessions or unknown rates. Unmeasured sessions cannot distinguish [1m] tiers; cache creation assumes the supplied 5m rate.",
+    totals, groups: rows.length, rows: rows.slice(0, opts.limit) };
+}
+
+/**
+ * Offline estimator audit: partial known-rate subtotal, not a fitted model.
+ *
+ * The error distribution is reported over *fully priced* sessions only, and
+ * that split is the whole point. A session whose every request is `[1m]` or an
+ * unknown model estimates to $0 and scores a relative error of exactly 1.0 --
+ * which is not a 100% estimation error, it is an absence being graded as a
+ * wrong answer. Pooling the two put 37 sessions at exactly 1.0 and pinned p90
+ * to 100%, a number that says nothing about the estimator and cannot move when
+ * the estimator improves. `declined` carries those sessions and their measured
+ * dollars so the hole stays visible rather than being smoothed into a quantile.
+ */
+export function estimatorAudit(db: Database) {
+  const tiers = contextTiers(db);
+  const sessions = db.query("SELECT session_id, total_cost_usd FROM sessions WHERE total_cost_usd IS NOT NULL ORDER BY session_id").all() as { session_id: string; total_cost_usd: number }[];
+  const rows = sessions.map(session => {
+    const requests = db.query("SELECT * FROM requests WHERE session_id=?").all(session.session_id) as PricedRequest[];
+    let estimated = 0, unpriced = 0;
+    for (const raw of requests) { const price = estimateRequest(withTier(raw, tiers)); if (price.usd === null) unpriced++; else estimated += price.usd; }
+    return { session_id: session.session_id, measured: session.total_cost_usd, estimated,
+      unpricedRequests: unpriced, requests: requests.length,
+      absoluteError: Math.abs(estimated - session.total_cost_usd), relativeError: session.total_cost_usd > 0 ? Math.abs(estimated - session.total_cost_usd) / session.total_cost_usd : null };
+  });
+  const sum = (rs: typeof rows, key: "measured" | "estimated" | "requests" | "unpricedRequests") => rs.reduce((n, r) => n + r[key], 0);
+  // A session with no ingested requests is vacuously "fully priced" at $0 and
+  // scores 1.0 as well; six of them exist in the corpus. Same absence, same
+  // exclusion.
+  const priceable = (r: (typeof rows)[number]) => r.requests > 0 && r.unpricedRequests === 0;
+  const scored = rows.filter(r => priceable(r) && r.relativeError !== null);
+  const declined = rows.filter(r => !priceable(r));
+  const errors = scored.map(r => r.relativeError!).sort((a, b) => a - b);
+  const quantile = (p: number) => errors.length ? errors[Math.min(errors.length - 1, Math.ceil(p * errors.length) - 1)]! : null;
+  return {
+    sessions: rows.length,
+    zeroCostSessions: rows.filter(r => r.relativeError === null).length,
+    measured: sum(rows, "measured"), estimated: sum(rows, "estimated"),
+    /** Every request priced and a positive measured total: the only sessions an error can be computed for. */
+    priced: { sessions: scored.length, measured: sum(scored, "measured"), estimated: sum(scored, "estimated"),
+      median: quantile(.5), p90: quantile(.9), worst: errors.at(-1) ?? null },
+    /** Nothing to price, or a request the estimator refused to price. Not an error -- a gap. */
+    declined: { sessions: declined.length, measured: sum(declined, "measured"),
+      requests: sum(declined, "requests"), unpricedRequests: sum(declined, "unpricedRequests"),
+      sessionsWithNoRequests: declined.filter(r => r.requests === 0).length },
+    rows,
+  };
+}
+
+export function cache(db: Database, opts: RequestFilters & { by?: "model" | "project" } = {}) {
+  const by = opts.by ?? "model";
+  const meta = reportMeta(db, opts), w = requestWhere(opts);
+  const column = by === "project" ? "project" : "model";
+  const rows = (db.query(`SELECT COALESCE(${column}, '(unknown)') key, ${TOTALS_SELECT} FROM requests WHERE ${w.sql}
+    GROUP BY ${column} ORDER BY total_tokens DESC, key`).all(w.params) as BreakdownRow[]).map(row => ({ ...row,
+      readCreationRatio: row.cache_creation_tokens ? row.cache_read_tokens / row.cache_creation_tokens : null,
+      reconciliationGap: row.cache_creation_tokens - row.ephemeral_5m - row.ephemeral_1h,
+    }));
+  return { ...meta, by, coverage: coverage(meta.total, rows.filter(r => r.key !== "(unknown)").reduce((n, r) => n + r.requests, 0)),
+    groups: rows.length, rows: rows.slice(0, opts.limit) };
+}
+
+/* ---------------------------------------- observed five-hour meter cycles -- */
+export interface MeterCycle {
+  kind: "cycle" | "gap";
+  startMs: number; endMs: number;
+  startReason: "observation" | "drop" | "gap";
+  peakPct: number | null; peakAtMs: number | null; timeToPeakMs: number | null;
+  resetAtMs: number | null; resetConfirmed: boolean;
+  resetBetween: [number, number] | null;
+  samples: number; local: TokenTotals | null;
+}
+/** Fixed-anchor clustering avoids both equality keys and transitive drift. */
+export function clusterResets(times: number[], tolerance = 120_000): number[][] {
+  const clusters: number[][] = [];
+  for (const t of [...times].filter(Number.isFinite).sort((a, b) => a - b)) {
+    const last = clusters.at(-1);
+    if (last && t - last[0]! <= tolerance) last.push(t); else clusters.push([t]);
+  }
+  return clusters;
+}
+export function blocks(db: Database, opts: RequestFilters = {}) {
+  const until = opts.until ?? Date.now();
+  const earliest = (db.query("SELECT MIN(ts_ms) t FROM limit_samples WHERE source <> 'glaze'").get() as { t: number | null }).t;
+  const since = opts.since ?? earliest ?? until;
+  const samples = db.query(`SELECT ts_ms, source, five_hour_pct pct, five_hour_resets_at reset FROM limit_samples
+    WHERE ts_ms >= $since AND ts_ms < $until AND source <> 'glaze' AND five_hour_pct IS NOT NULL ORDER BY ts_ms`)
+    .all({ $since: since, $until: until }) as { ts_ms: number; source: string; pct: number; reset: string | null }[];
+  // Do not turn disagreement between different sources into a meter drop.
+  const source = samples.some(s => s.source === "desktop-history") ? "desktop-history"
+    : samples.some(s => s.source === "oauth-live") ? "oauth-live" : "oauth-cache";
+  const meter = samples.filter(s => s.source === source);
+  // Mixing sources would turn a disagreement between them into a spurious
+  // drop, so only one series drives the boundaries. The samples that lose are
+  // still real observations, and some of the rendered gaps are them -- say so
+  // rather than letting missing data and set-aside data look identical.
+  const setAside = { samples: samples.length - meter.length,
+    sources: [...new Set(samples.filter(s => s.source !== source).map(s => s.source))].sort() };
+  const resets = clusterResets(samples.filter(s => s.source.startsWith("oauth") && s.reset).map(s => Date.parse(s.reset!)));
+  const rows: MeterCycle[] = [];
+  let active: MeterCycle | null = null;
+  let previous: typeof meter[number] | undefined;
+  const begin = (sample: typeof meter[number], reason: MeterCycle["startReason"]) => ({
+    kind: "cycle" as const, startMs: sample.ts_ms, endMs: sample.ts_ms + 1, startReason: reason,
+    peakPct: sample.pct, peakAtMs: sample.ts_ms, timeToPeakMs: 0,
+    resetAtMs: null, resetConfirmed: false, resetBetween: null, samples: 0, local: null,
+  });
+  for (const sample of meter) {
+    const gap = previous && sample.ts_ms - previous.ts_ms > 30 * 60_000;
+    const drop = previous && !gap && previous.pct - sample.pct >= 5 && sample.pct <= previous.pct * .5;
+    if (!active) active = begin(sample, "observation");
+    else if (gap) {
+      active.endMs = previous!.ts_ms + 1; rows.push(active);
+      rows.push({ ...begin(sample, "gap"), kind: "gap", startMs: previous!.ts_ms + 1, endMs: sample.ts_ms,
+        peakPct: null, peakAtMs: null, timeToPeakMs: null });
+      active = begin(sample, "gap");
+    } else if (drop) {
+      active.endMs = sample.ts_ms;
+      active.resetBetween = [previous!.ts_ms, sample.ts_ms];
+      const confirmations = resets.filter(c => c[0]! >= previous!.ts_ms - 120_000 && c.at(-1)! <= sample.ts_ms + 120_000);
+      if (confirmations.length === 1) {
+        active.resetAtMs = confirmations[0]![Math.floor(confirmations[0]!.length / 2)]!;
+        active.resetConfirmed = true;
+      }
+      rows.push(active); active = begin(sample, "drop");
+    }
+    active.samples++;
+    active.endMs = sample.ts_ms + 1;
+    if (sample.pct > (active.peakPct ?? -1)) {
+      active.peakPct = sample.pct; active.peakAtMs = sample.ts_ms; active.timeToPeakMs = sample.ts_ms - active.startMs;
+    }
+    previous = sample;
+  }
+  if (active) rows.push(active);
+  for (const row of rows) if (row.kind === "cycle") {
+    const w = requestWhere({ ...opts, since: row.startMs, until: row.endMs });
+    row.local = db.query(`SELECT ${TOTALS_SELECT} FROM requests WHERE ${w.sql}`).get(w.params) as TokenTotals;
+  }
+  const meta = reportMeta(db, opts);
+  const covered = rows.reduce((n, r) => n + (r.local?.requests ?? 0), 0);
+  return { since, until, source, setAside, lastSampleMs: meter.at(-1)?.ts_ms ?? null, samples: meter.length,
+    coverage: coverage(meta.total, covered), resetToleranceMs: 120_000, gapThresholdMs: 1_800_000,
+    dropRule: "drop of at least 5 percentage points and at least 50% between adjacent samples of one source",
+    note: "Observed meter cycles, not inferred 5h token blocks. First/last cycles and gaps are partial. Time to peak is from first observation. Reset time is confirmed only by OAuth, otherwise bracketed by samples. Local activity is context, not explanation: historical r=0.69; 39% of intervals >=15% had no local activity.",
+    cycles: rows.filter(r => r.kind === "cycle").length, rows: rows.slice(0, opts.limit) };
+}
+
+/**
+ * Tokens, not cost, and deliberately.
+ *
+ * `cost --by day` is right to exclude any session whose requests straddle a
+ * bucket boundary -- a cumulative cost-state total cannot be split across two
+ * days. But the session you are sitting in almost always started before UTC
+ * midnight, so the in-progress session is always excluded and "today" reads
+ * $0.00 for most of the day. A statusline that shows $0.00 while you spend
+ * money is the "never present a derived number as fact" failure wearing the
+ * opposite mask. Tokens need no attribution and no pricing snapshot, so they
+ * are exact. Cost lives in `cusage cost`, where the exclusions are visible.
+ */
+export function statusline(db: Database, nowMs = Date.now()) {
+  const limits = currentLimits(db, { nowMs });
+  const day = new Date(nowMs); day.setUTCHours(0, 0, 0, 0);
+  const totals = corpusTotals(db, day.getTime());
+  const latestRequestMs = (db.query("SELECT MAX(ts_ms) t FROM requests").get() as { t: number | null }).t;
+  return { nowMs, limits, today: { timezone: "UTC", since: day.getTime(), ...totals, latestRequestMs } };
+}
+
+/** Preserve groupSessions' array API while adding full-selection CLI metadata. */
+export function sessionGroupsReport(db: Database, by: NonNullable<SessionsOptions["by"]>, opts: RequestFilters = {}) {
+  const rows = groupSessions(db, by, opts);
+  const meta = reportMeta(db, opts);
+  const attributed = rows.filter(r => r.key !== "(unknown)").reduce((n, r) => n + r.requests, 0);
+  return { ...meta, by, coverage: coverage(meta.total, attributed), groups: rows.length, rows: rows.slice(0, opts.limit) };
 }

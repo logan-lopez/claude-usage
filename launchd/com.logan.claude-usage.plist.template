@@ -6,8 +6,7 @@
   Rendered from this template by scripts/install-agents.sh; {{REPO}} and
   {{HOME}} are substituted there. Do not install this file directly.
 
-  bun is invoked by absolute path on purpose. node lives behind an fnm
-  multishell path that changes every shell, which launchd does not have.
+  The compiled binary and working directory survive deletion of the checkout.
 -->
 <plist version="1.0">
 <dict>
@@ -16,21 +15,19 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>{{HOME}}/.bun/bin/bun</string>
-    <string>run</string>
-    <string>{{REPO}}/src/cli.ts</string>
+    <string>{{HOME}}/.local/bin/cusage</string>
     <string>sync</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>{{REPO}}</string>
+  <string>{{HOME}}</string>
 
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOME</key>
     <string>{{HOME}}</string>
     <key>PATH</key>
-    <string>{{HOME}}/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <string>{{HOME}}/.local/bin:/usr/local/bin:/usr/bin:/bin</string>
   </dict>
 
   <key>StartInterval</key>

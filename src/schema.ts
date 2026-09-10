@@ -3,13 +3,18 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { paths } from "./paths.ts";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /**
  * Migrations are append-only. Index N runs when user_version < N + 1.
  * Never edit a shipped entry -- add a new one.
+ *
+ * Exported so the migration test can build a genuine v1 archive from
+ * `MIGRATIONS[0]` rather than rewinding a current one by hand. A hand-rewound
+ * archive needs a fresh undo written for every migration added, and gets it
+ * wrong silently when someone forgets.
  */
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: string[] = [
   /* ---------------------------------------------------------------- v1 -- */ `
 CREATE TABLE requests (
   -- Key. request_id is '' (never NULL) when the transcript omits it: 228
@@ -216,6 +221,17 @@ CREATE TABLE meta (
 -- RENAME COLUMN rewrites the schema only, so every existing value carries
 -- over untouched and nothing has to be recomputed.
 ALTER TABLE sessions RENAME COLUMN message_count TO request_count;
+`,
+  /* ---------------------------------------------------------------- v3 -- */ `
+-- Tool attribution joins tool_calls to requests on (session_id, message_id).
+-- Neither side could seek that: tool_calls' key is (session_id, tool_use_id)
+-- and requests' key leads with message_id, so the join scanned one table in
+-- full per row of the other. Measured, 'attribution --by tool' took 5.5s on
+-- 8.9K requests against 11.7K tool calls, while every other view ran in under
+-- 100ms. Both indexes are needed -- one for each direction the planner may
+-- choose -- and neither duplicates an existing key prefix.
+CREATE INDEX tool_calls_message ON tool_calls (session_id, message_id);
+CREATE INDEX requests_message   ON requests (session_id, message_id);
 `,
 ];
 

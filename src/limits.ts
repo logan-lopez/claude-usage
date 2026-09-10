@@ -169,7 +169,7 @@ export async function snapshotOauthCache(
 export type RefreshMode = "off" | "stale" | "force";
 
 /** Persisted so the floor holds across processes, not just within one. */
-const LAST_ATTEMPT_KEY = "oauth_live_last_attempt_ms";
+export const LAST_ATTEMPT_KEY = "oauth_live_last_attempt_ms";
 
 export interface RefreshOutcome {
   mode: RefreshMode;
@@ -234,15 +234,21 @@ export async function refreshFromApi(
     return { ...base, reason: "fresh" };
   }
 
-  const lastAttempt = Number(getMeta(db, LAST_ATTEMPT_KEY)) || 0;
-  const sinceAttempt = now - lastAttempt;
-  if (sinceAttempt < MIN_REFRESH_MS) {
-    return { ...base, reason: "guard", waitMs: MIN_REFRESH_MS - sinceAttempt };
+  // Claim the attempt while holding SQLite's write lock. Separate get/set
+  // calls race across statusline workers and launchd processes.
+  let waitMs: number;
+  try {
+    waitMs = db.transaction(() => {
+      const lastAttempt = Number(getMeta(db, LAST_ATTEMPT_KEY)) || 0;
+      const sinceAttempt = now - lastAttempt;
+      if (sinceAttempt < MIN_REFRESH_MS) return MIN_REFRESH_MS - sinceAttempt;
+      setMeta(db, LAST_ATTEMPT_KEY, String(now));
+      return 0;
+    }).immediate();
+  } catch {
+    return { ...base, reason: "failed", error: "could not claim archive refresh guard; no request sent" };
   }
-
-  // Recorded before the request, not after: a hung fetch must still consume
-  // the interval, or a slow endpoint turns into a retry storm.
-  setMeta(db, LAST_ATTEMPT_KEY, String(now));
+  if (waitMs > 0) return { ...base, reason: "guard", waitMs };
 
   const token = await readToken({ nowMs: now });
   if (!token) {

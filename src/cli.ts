@@ -7,13 +7,17 @@
  * `--json` several times a minute; neither may pay React's startup cost.
  * `cusage tui` is a separate bin target. See CLAUDE.md.
  */
+import { Database } from "bun:sqlite";
 import { openDb } from "./schema.ts";
 import { ingestTranscripts } from "./ingest.ts";
 import { type RefreshMode, refreshFromApi, syncLimits } from "./limits.ts";
 import { paths } from "./paths.ts";
 import { parseDuration, parseSince } from "./time.ts";
 import * as q from "./query.ts";
-import * as f from "./format.ts";
+
+import { Command, CommanderError, Option } from "commander";
+import { filters, byOption, readWindow } from "./args.ts";
+import { reportCsv, serializeRows } from "./serialize.ts";
 
 interface Args {
   command: string;
@@ -21,47 +25,119 @@ interface Args {
   flags: Record<string, string | true>;
 }
 
-/**
- * Flags that consume the next argument. Everything else is a boolean.
- *
- * The rule used to be the opposite — any flag swallowed the next non-`--`
- * token — so `cusage --json status` set `json: "status"`, left no positional,
- * fell through to the help text and exited 0. No error, no requested output.
- * Putting global flags before the command is the natural way to type this and
- * it has to work.
- *
- * Registering a new value flag here is one line. Forgetting to means its
- * argument lands in `positional`, which is loud — the right direction for the
- * failure to point.
- */
-const VALUE_FLAGS = new Set([
-  "db", "transcripts", "since", "by", "limit", "project", "bucket",
-]);
-
-function parseArgs(argv: string[], valueFlags: Set<string> = VALUE_FLAGS): Args {
-  const positional: string[] = [];
-  const flags: Record<string, string | true> = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
-    if (!a.startsWith("--")) {
-      positional.push(a);
-      continue;
-    }
-    const eq = a.indexOf("=");
-    if (eq > 0) {
-      flags[a.slice(2, eq)] = a.slice(eq + 1);
-      continue;
-    }
-    const key = a.slice(2);
-    const next = argv[i + 1];
-    if (valueFlags.has(key) && next !== undefined && !next.startsWith("--")) {
-      flags[key] = next;
-      i++;
-    } else {
-      flags[key] = true;
-    }
+export function createProgram(): Command {
+  const program = new Command()
+    .name("cusage")
+    .description("Claude subscription usage explorer")
+    .exitOverride()
+    .configureOutput({ writeErr: () => {} })
+    .configureHelp({ showGlobalOptions: true })
+    .option("--db <path>", "archive override")
+    .addOption(new Option("--json", "machine-readable output").conflicts("csv"))
+    .addOption(new Option("--csv", "CSV output").conflicts("json"))
+    .option("--no-color", "plain output")
+    .option(
+      "--refresh",
+      "refresh stale limits (3-minute attempt floor still applies)",
+    )
+    .option("--no-refresh", "archive only");
+  program
+    .command("sync")
+    .description("ingest transcripts and snapshot limits")
+    .option("--limits-only")
+    .option("--no-backfill")
+    .option("--transcripts <path>");
+  program
+    .command("session [id]")
+    .description("one chat's token and cost breakdown")
+    .option("--last");
+  filters(
+    program.command("sessions").description("list or group chats"),
+  ).addOption(byOption(["project", "model", "entrypoint", "branch"]));
+  program
+    .command("limits")
+    .description("server-reported limits")
+    .option("--history")
+    .option("--until <dur|iso>")
+    .option("--since <dur|iso|all>")
+    .option("--bucket <duration>")
+    .option("--glaze");
+  program.command("status").description("archive inventory");
+  filters(
+    program
+      .command("attribution")
+      .description("local attribution with coverage"),
+  ).addOption(
+    byOption([...Object.keys(q.ATTRIBUTION_COLUMNS), "tool"]).default("agent"),
+  );
+  for (const name of ["timeline", "daily", "weekly", "monthly"]) {
+    const cmd = filters(
+      program.command(name).description("UTC token time series"),
+    ).addOption(byOption(["model", "project", "effort"]));
+    if (name === "timeline")
+      cmd.addOption(
+        new Option("--bucket <size>")
+          .choices(["day", "week", "month", "auto"])
+          .default("day"),
+      );
   }
-  return { command: positional.shift() ?? "help", positional, flags };
+  filters(program.command("export").description("stream archived rows"))
+    .addOption(
+      new Option("--format <format>")
+        .choices(["json", "ndjson", "csv"])
+        .default("ndjson"),
+    )
+    .addOption(
+      new Option("--table <table>")
+        .choices(["requests", "sessions", "tools", "limits"])
+        .default("requests"),
+    );
+  filters(
+    program
+      .command("cost")
+      .description("measured costs and separate token estimates"),
+  )
+    .addOption(byOption(["model", "project", "session", "day"]))
+    .addOption(new Option("--measured").conflicts("estimated"))
+    .addOption(new Option("--estimated").conflicts("measured"));
+  filters(
+    program
+      .command("cache")
+      .description("cache read/creation ratio and reconciliation gap"),
+  ).addOption(byOption(["model", "project"]));
+  filters(
+    program
+      .command("blocks")
+      .description("observed five-hour meter cycles with local context"),
+  );
+  program
+    .command("statusline")
+    .description("one archived line; refreshes in background");
+  program
+    .command("doctor")
+    .description("check archive and launch agents")
+    .option("--repo <path>", "repository HEAD to compare with binary stamp");
+  return program;
+}
+
+/** Commander validates first; this adapter preserves the dispatch boundary. */
+function parseArgs(argv: string[], program = createProgram()): Args {
+  let result: Args = { command: "help", positional: [], flags: {} };
+  for (const cmd of program.commands)
+    cmd.action((...args: unknown[]) => {
+      const command = args.at(-1) as Command;
+      const flags: Args["flags"] = {};
+      for (const [key, value] of Object.entries(command.optsWithGlobals())) {
+        const owner = command.getOptionValueSource(key) ? command : program;
+        if (owner.getOptionValueSource(key) === "default") continue;
+        const name = key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+        if (value === false) flags[`no-${name}`] = true;
+        else flags[name] = value === true ? true : String(value);
+      }
+      result = { command: command.name(), positional: command.args, flags };
+    });
+  if (argv.length) program.parse(argv, { from: "user" });
+  return result;
 }
 
 const str = (v: string | true | undefined): string | undefined =>
@@ -82,48 +158,78 @@ function refreshMode(flags: Args["flags"], fallback: RefreshMode): RefreshMode {
   return fallback;
 }
 
-const USAGE = `cusage — Claude subscription usage explorer
-
-  sync [--limits-only] [--no-backfill]   ingest transcripts + snapshot limits (idempotent)
-  session [<id>|--last]                  one chat: full token, attribution and cost breakdown
-  sessions [--since 7d] [--by project|model|entrypoint|branch] [--limit N] [--project P]
-  limits [--refresh]                     current server-reported limits, incl. weekly_scoped
-  limits --history [--since 7d] [--bucket 1h] [--glaze]
-  status                                 what the archive currently holds
-
-  not yet implemented (phases 3-4):  cost  blocks  attribution  daily  weekly  monthly  export  pricing
-
-Global flags
-  --json         machine-readable output (never touches the formatter)
-  --db <path>    override the archive location (default ${paths.db})
-  --no-color     plain output
-
-Refreshing limits
-  weekly_scoped — "Fable 74%", the limit that actually binds — is in no local
-  file, so \`limits\` and \`sync\` fetch it from /api/oauth/usage when the
-  archived copy is older than 15m.
-
-  --refresh      fetch now, skipping the staleness check
-  --no-refresh   read the archive only; never touch the network
-  \$CUSAGE_REFRESH=off|stale|force    the same choice, for launchd and scripts
-
-  Every attempt, however triggered, sits behind a 3-minute floor that nothing
-  overrides. No host other than api.anthropic.com is ever contacted.
-`;
-
 async function main(argv: string[]): Promise<number> {
-  const { command, positional, flags } = parseArgs(argv);
-  const json = flags.json === true || flags.json === "true";
-  f.setColour(!json && flags["no-color"] !== true && Bun.stdout.writer !== undefined && process.stdout.isTTY === true);
+  const program = createProgram();
+  let parsed: Args;
+  try {
+    parsed = parseArgs(argv, program);
+  } catch (e) {
+    if (e instanceof CommanderError && e.exitCode === 0) return 0;
+    process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+    return 2;
+  }
+  const { command, positional, flags } = parsed;
+  let window: ReturnType<typeof readWindow>;
+  try {
+    window = readWindow(flags);
+    if (
+      command === "export" &&
+      flags.format &&
+      ((flags.json && flags.format !== "json") ||
+        (flags.csv && flags.format !== "csv"))
+    )
+      throw new Error(
+        "--format conflicts with the selected --json/--csv output",
+      );
+    if (
+      command === "limits" &&
+      flags.bucket !== undefined &&
+      !(parseDuration(str(flags.bucket))! > 0)
+    )
+      throw new Error(
+        "--bucket must be a positive duration such as 15m, 1h or 1d",
+      );
+  } catch (e) {
+    process.stderr.write(`${(e as Error).message}\n`);
+    return 2;
+  }
+  const json = flags.json === true;
+  const csv = flags.csv === true;
+  // Machine output never loads the formatter, so `format` is genuinely null on
+  // those paths. `emit` hands it to the renderer instead of letting twelve call
+  // sites assert it away, which keeps the one assumption in one place.
+  type Formatter = typeof import("./format.ts");
+  const format: Formatter | null =
+    !json && !csv && command !== "export" ? await import("./format.ts") : null;
+  format?.setColour(
+    flags["no-color"] !== true &&
+      Bun.stdout.writer !== undefined &&
+      process.stdout.isTTY === true,
+  );
 
   if (command === "help" || flags.help === true) {
-    process.stdout.write(USAGE);
+    program.outputHelp();
     return 0;
   }
 
-  const db = openDb(str(flags.db) ?? paths.db);
-  const emit = (data: unknown, text: () => string) => {
-    process.stdout.write(json ? JSON.stringify(data, null, 2) + "\n" : text());
+  let db: Database;
+  try {
+    db =
+      command === "doctor"
+        ? new Database(str(flags.db) ?? paths.db, { readonly: true })
+        : openDb(str(flags.db) ?? paths.db);
+  } catch (e) {
+    process.stderr.write(`cannot open archive: ${(e as Error).message}\n`);
+    return 2;
+  }
+  const emit = (data: unknown, text: (f: Formatter) => string) => {
+    process.stdout.write(
+      json
+        ? JSON.stringify(data, null, 2) + "\n"
+        : csv
+          ? reportCsv(data)
+          : text(format!),
+    );
   };
   /** Operational asides go to stderr so `--json` stays parseable. */
   const note = (s: string | null) => {
@@ -138,10 +244,21 @@ async function main(argv: string[]): Promise<number> {
           backfill: flags["no-backfill"] !== true,
           refresh: refreshMode(flags, "stale"),
         });
-        note(f.renderRefreshNote(limits.refresh));
-        const ingest = limitsOnly ? null : ingestTranscripts(db, str(flags.transcripts) ?? paths.transcripts);
-        const result = { db: str(flags.db) ?? paths.db, limitsOnly, limits, ingest };
-        emit(result, () => {
+        note(
+          limits.refresh.reason === "failed"
+            ? `could not refresh: ${limits.refresh.error}. Showing archived data.`
+            : (format?.renderRefreshNote(limits.refresh) ?? null),
+        );
+        const ingest = limitsOnly
+          ? null
+          : ingestTranscripts(db, str(flags.transcripts) ?? paths.transcripts);
+        const result = {
+          db: str(flags.db) ?? paths.db,
+          limitsOnly,
+          limits,
+          ingest,
+        };
+        emit(result, (f) => {
           const lines = [`archive: ${result.db}`];
           if (ingest) {
             lines.push(
@@ -150,9 +267,16 @@ async function main(argv: string[]): Promise<number> {
               `records: ${ingest.assistantRecords} assistant, ${ingest.costStateRecords} cost-state,` +
                 ` ${ingest.toolCalls} tool calls`,
             );
-            if (ingest.parseErrors) lines.push(`parse errors: ${ingest.parseErrors}`);
-            if (ingest.rewound) lines.push(`re-read from zero (truncated/rotated): ${ingest.rewound}`);
-            if (ingest.partialTail) lines.push(`partial trailing record left for next run: ${ingest.partialTail}`);
+            if (ingest.parseErrors)
+              lines.push(`parse errors: ${ingest.parseErrors}`);
+            if (ingest.rewound)
+              lines.push(
+                `re-read from zero (truncated/rotated): ${ingest.rewound}`,
+              );
+            if (ingest.partialTail)
+              lines.push(
+                `partial trailing record left for next run: ${ingest.partialTail}`,
+              );
           }
           lines.push(
             `limits: ${limits.refresh.ok ? "live fetch ok" : `no fetch (${limits.refresh.reason})`},` +
@@ -161,7 +285,9 @@ async function main(argv: string[]): Promise<number> {
               ` ${limits.scopedInserted} scoped rows`,
           );
           const st = q.archiveStats(db);
-          lines.push(`archive now holds ${st.requests} requests across ${st.sessions} sessions`);
+          lines.push(
+            `archive now holds ${st.requests} requests across ${st.sessions} sessions`,
+          );
           return lines.join("\n") + "\n";
         });
         return 0;
@@ -179,91 +305,190 @@ async function main(argv: string[]): Promise<number> {
           process.stderr.write("no matching session\n");
           return 1;
         }
-        emit(detail, () => f.renderSession(detail));
+        emit(detail, (f) => f.renderSession(detail));
         return 0;
       }
 
       case "sessions": {
-        const since = parseSince(str(flags.since));
+        // No allowlist here: byOption() rejected anything outside the set
+        // before the archive was even opened, and a second copy of the list is
+        // exactly the drift the commander migration was meant to end.
         const by = str(flags.by) as q.SessionsOptions["by"];
         if (by) {
-          if (!["project", "model", "entrypoint", "branch"].includes(by)) {
-            process.stderr.write(`--by must be project|model|entrypoint|branch\n`);
-            return 2;
-          }
-          const rows = q.groupSessions(db, by, { since });
-          emit(rows, () => f.renderGroups(rows, by) + "\n");
+          const data = q.sessionGroupsReport(db, by, window);
+          emit(
+            data,
+            (f) =>
+              f.renderGroups(data.rows, by, data.coverage) +
+              `\n${data.rows.length} of ${data.groups} groups shown · ${data.source}\n`,
+          );
           return 0;
         }
         const rows = q.listSessions(db, {
-          since,
-          limit: Number(str(flags.limit) ?? 30),
-          project: str(flags.project) ?? null,
+          ...window,
+          limit: window.limit ?? 30,
         });
-        emit(rows, () => f.renderSessions(rows) + "\n");
+        emit(rows, (f) => f.renderSessions(rows) + "\n");
         return 0;
       }
 
       case "limits": {
         // Reading the limits is the one place a stale answer is actively
         // harmful, so this is the one read path allowed to go and check.
-        const refresh = await refreshFromApi(db, { mode: refreshMode(flags, "stale") });
-        note(f.renderRefreshNote(refresh));
+        const refresh = await refreshFromApi(db, {
+          mode: refreshMode(flags, "stale"),
+        });
+        note(
+          refresh.reason === "failed"
+            ? `could not refresh: ${refresh.error}. Showing archived data.`
+            : (format?.renderRefreshNote(refresh) ?? null),
+        );
 
         if (flags.history === true) {
           const bucket = str(flags.bucket);
           const bucketMs = parseDuration(bucket);
           if (bucket !== undefined && bucketMs === null) {
-            process.stderr.write(`--bucket must look like 15m, 1h or 1d (got ${bucket})\n`);
+            process.stderr.write(
+              `--bucket must look like 15m, 1h or 1d (got ${bucket})\n`,
+            );
             return 2;
           }
           const history = q.limitsHistory(db, {
             since: parseSince(str(flags.since) ?? "7d"),
             bucketMs,
+            until: window.until,
             includeGlaze: flags.glaze === true,
           });
-          emit(history, () => f.renderLimitsHistory(history));
+          emit(history, (f) => f.renderLimitsHistory(history));
           return 0;
         }
 
         const now = q.currentLimits(db);
-        emit({ ...(now ?? {}), refresh }, () => f.renderLimits(now));
+        emit({ ...(now ?? {}), refresh }, (f) => f.renderLimits(now));
         return 0;
       }
 
       case "status": {
         const st = q.archiveStats(db);
-        emit(st, () =>
-          [
-            `archive      ${str(flags.db) ?? paths.db}`,
-            `requests     ${f.num(st.requests)}  across ${st.sessions} sessions` +
-              ` (${st.sessionsWithCost} with cost-state)`,
-            `tool calls   ${f.num(st.toolCalls)}`,
-            `files        ${st.filesTracked} transcripts tracked`,
-            `limits       ${f.num(st.limitSamples)} samples`,
-            `covers       ${st.firstTs ?? "-"} → ${st.lastTs ?? "-"}`,
-            `tokens       out ${f.num(st.totals.output_tokens)}` +
-              `  cache w ${f.num(st.totals.cache_creation_tokens)}` +
-              `  cache r ${f.num(st.totals.cache_read_tokens)}` +
-              `  think ${f.num(st.totals.thinking_tokens)}`,
-          ].join("\n") + "\n",
+        emit(
+          st,
+          (f) =>
+            [
+              `archive      ${str(flags.db) ?? paths.db}`,
+              `requests     ${f.num(st.requests)}  across ${st.sessions} sessions` +
+                ` (${st.sessionsWithCost} with cost-state)`,
+              `tool calls   ${f.num(st.toolCalls)}`,
+              `files        ${st.filesTracked} transcripts tracked`,
+              `limits       ${f.num(st.limitSamples)} samples`,
+              `covers       ${st.firstTs ?? "-"} → ${st.lastTs ?? "-"}`,
+              `tokens       out ${f.num(st.totals.output_tokens)}` +
+                `  cache w ${f.num(st.totals.cache_creation_tokens)}` +
+                `  cache r ${f.num(st.totals.cache_read_tokens)}` +
+                `  think ${f.num(st.totals.thinking_tokens)}`,
+            ].join("\n") + "\n",
         );
         return 0;
       }
 
-      case "cost":
-      case "blocks":
-      case "attribution":
+      case "attribution": {
+        const data = q.attribution(
+          db,
+          (str(flags.by) ?? "agent") as q.AttributionDimension,
+          window,
+        );
+        emit(data, (f) => f.renderAttribution(data));
+        return 0;
+      }
+      case "timeline":
       case "daily":
       case "weekly":
-      case "monthly":
-      case "export":
-      case "pricing":
-        process.stderr.write(`\`cusage ${command}\` is not implemented yet (phases 3-4).\n`);
-        return 2;
+      case "monthly": {
+        const bucket =
+          ({ daily: "day", weekly: "week", monthly: "month" } as const)[
+            command as "daily" | "weekly" | "monthly"
+          ] ??
+          str(flags.bucket) ??
+          "day";
+        const data = q.timeline(db, {
+          ...readWindow(flags, "30d"),
+          bucket: bucket as q.TimelineBucket,
+          by: str(flags.by) as "model" | "project" | "effort" | undefined,
+        });
+        emit(data, (f) => f.renderTimeline(data));
+        return 0;
+      }
+      case "blocks": {
+        const data = q.blocks(db, readWindow(flags, "7d"));
+        emit(data, (f) => f.renderBlocks(data));
+        return 0;
+      }
+      case "statusline": {
+        const data = q.statusline(db);
+        const { scheduleStatusRefresh } = await import("./statusline.ts");
+        const refreshScheduled = scheduleStatusRefresh(
+          db,
+          str(flags.db) ?? paths.db,
+          refreshMode(flags, "stale"),
+        );
+        emit({ ...data, refreshScheduled }, (f) => f.renderStatusline(data));
+        return 0;
+      }
+      case "cost": {
+        const data = q.cost(db, {
+          ...readWindow(flags, "30d"),
+          by: str(flags.by) as
+            | "model"
+            | "project"
+            | "session"
+            | "day"
+            | undefined,
+          basis: flags.measured
+            ? "measured"
+            : flags.estimated
+              ? "estimated"
+              : undefined,
+        });
+        emit(data, (f) => f.renderCost(data));
+        return 0;
+      }
+      case "cache": {
+        const data = q.cache(db, {
+          ...readWindow(flags, "30d"),
+          by: str(flags.by) as "model" | "project" | undefined,
+        });
+        emit(data, (f) => f.renderCache(data));
+        return 0;
+      }
+      case "doctor": {
+        const { doctor } = await import("./doctor.ts");
+        const data = await doctor(db, str(flags.db) ?? paths.db, {
+          repo: str(flags.repo),
+        });
+        emit(data, (f) => f.renderDoctor(data));
+        return data.exitCode;
+      }
+      case "export": {
+        const format = (str(flags.format) ??
+          (json ? "json" : csv ? "csv" : "ndjson")) as
+          | "json"
+          | "ndjson"
+          | "csv";
+        const data = q.exportRows(
+          db,
+          (str(flags.table) ?? "requests") as q.ExportTable,
+          window,
+        );
+        for (const chunk of serializeRows(data.rows, format, data.columns)) {
+          if (!process.stdout.write(chunk))
+            await new Promise<void>((resolve) =>
+              process.stdout.once("drain", resolve),
+            );
+        }
+        return 0;
+      }
 
       default:
-        process.stderr.write(`unknown command: ${command}\n\n${USAGE}`);
+        process.stderr.write(`unknown command: ${command}`);
         return 2;
     }
   } catch (e) {
@@ -283,4 +508,4 @@ if (import.meta.main) {
   process.exit(await main(process.argv.slice(2)));
 }
 
-export { main, parseArgs, VALUE_FLAGS };
+export { main, parseArgs };

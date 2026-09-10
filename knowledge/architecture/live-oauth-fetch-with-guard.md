@@ -2,12 +2,13 @@
 type: Decision
 title: The no-network rule is replaced by one endpoint behind a 3-minute floor
 description: cusage fetches GET /api/oauth/usage on a schedule because weekly_scoped exists in no local file, with a hard attempt floor persisted in meta so it holds across processes.
-generated: { by: agent/cli, at: 2026-09-09T22:05:11Z }
+generated: { by: agent/codex, at: 2026-09-10T00:54:25Z }
+sources: ["README.md", "src/query.ts", "src/limits.ts", "approved phase 3-4 user briefing"]
 ---
 
 ## Decision
 
-`src/oauth.ts` is the only file permitted to call `fetch`, and it calls exactly
+`src/oauth.ts` is the only shipped file permitted to call `fetch`, and it calls exactly
 one endpoint: `GET https://api.anthropic.com/api/oauth/usage`. `limits` and
 `sync` refresh when the archived copy is older than 15 minutes; `--refresh`
 forces a check, `--no-refresh` or `$CUSAGE_REFRESH=off` keeps a run local. The
@@ -73,3 +74,16 @@ the next call was refused by the guard.
 
 # Related Concepts
 - [Measured shape of the local Claude Code corpus, 2026-09-09](../findings/corpus-shape-2026-09-09.md): The measurements that showed the cached snapshot was 27h stale and weekly_scoped is nowhere on disk
+
+## Phase 3-4 update (2026-09-10 UTC)
+
+The refresh attempt is now claimed inside an immediate SQLite transaction.
+The previous separate read/write could race across processes. Four concurrent
+no-token CLI processes are tested offline: one claims the attempt, three see
+the guard. The statusline emits its archived reading and starts an unreferenced
+CLI worker; the worker survives parent exit and shares the same floor.
+
+The only exception outside shipped code is `tools/refresh-pricing.ts`, invoked
+manually to download pricing documentation. It is never imported or scheduled.
+
+Sources: `src/limits.ts`, `src/statusline.ts`, `tests/refresh.test.ts`, `tests/cli.test.ts`.
