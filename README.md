@@ -23,9 +23,11 @@ cusage status                  # what the archive holds
 
 ## Install
 
-Requires [Bun](https://bun.com) at `~/.bun/bin/bun` (pinned: **1.3.3**). No
-runtime dependencies — everything the archiver needs is in Bun's standard
-library, so the launchd agents have no install surface that can break.
+Requires [Bun](https://bun.com) at `~/.bun/bin/bun` (pinned: **1.3.3**).
+There are no runtime dependencies today, but that is a fact about the current
+code rather than a rule: `bun build --compile` produces a self-contained binary
+with the runtime and any dependency inside it, so the launchd agents have no
+install surface to break either way.
 
 ```bash
 bun install                 # dev types only

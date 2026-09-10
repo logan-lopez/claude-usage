@@ -50,10 +50,28 @@ any interruption, and "last" is the smallest streaming snapshot.
 offsets advance only to the last complete newline; `size < stored_size` or a
 changed inode forces a re-read from zero; commit per file, not per run.
 
-**No runtime dependencies.** This is a scoping rule, not a purity rule: it means
-the launchd agents have no install surface that can break. Adding one is a
-normal decision once it buys something real. The TUI phase adds `ink` and
-`react`, and that is expected.
+**Dependencies are allowed. What must not break is the agents' install
+surface.** The original rule was "no runtime dependencies", and its whole
+justification was that a launchd agent must not fail because a `node_modules`
+tree is missing, half-installed, or on the wrong branch. `bun build --compile`
+answers that better than abstinence does: one self-contained binary with the
+runtime and every dependency inside it, which also starts in ~39 ms against
+~98 ms for `bun run src/cli.ts` — and the statusline polls this several times a
+minute.
+
+So adding a dependency is now an ordinary decision, weighed on what it buys.
+Two things survive from the old rule and are still load-bearing:
+
+- **`src/tui.ts` stays separate and `react`/`ink` stay out of the CLI's import
+  graph.** That constraint was never about the dependency count; it is about
+  startup cost, and it gets *more* important once deps are cheap to add.
+- **No second network host.** See "One endpoint" below. That is a privacy and
+  blast-radius rule, unrelated to packaging, and a dependency does not get to
+  quietly bring one along.
+
+How the agents are actually invoked — a compiled binary at a fixed path, or
+`bun run` inside this checkout — is an open decision, not yet settled here.
+Today it is the checkout; see `launchd/*.template`.
 
 **One endpoint, and a floor in front of it.** The original rule was "no
 automatic network calls, ever", and it was wrong for a specific reason worth
