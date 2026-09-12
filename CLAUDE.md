@@ -16,8 +16,8 @@ archive is the product; the reporting on top of it is replaceable. See
 These are here because each of them is exactly the kind of thing a reasonable
 refactor deletes.
 
-**`src/tui.ts` is a separate bin target and the only file allowed to import
-`react` or `ink`.** The archiver runs hourly under launchd and the statusline
+**`src/tui.ts` is a separate bin target. Only it and the isolated `src/tui/`
+subtree may import `react`, `ink`, or `@inkjs/ui`.** The archiver runs hourly under launchd and the statusline
 may poll `--json` several times a minute; neither may pay React's startup cost.
 If the TUI is ever folded into `cli.ts`, it must be behind a lazy
 `await import('./tui.ts')` inside that one command arm and nowhere else.

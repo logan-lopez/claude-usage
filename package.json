@@ -4,7 +4,10 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "19.2.0",
+    "ink-testing-library": "4.0.0",
+    "react-devtools-core": "7.0.1"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"
@@ -20,6 +23,10 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
-    "commander": "15.0.0"
+    "@inkjs/ui": "2.0.0",
+    "commander": "15.0.0",
+    "ink": "7.1.1",
+    "react": "19.2.0",
+    "string-width": "8.2.0"
   }
 }

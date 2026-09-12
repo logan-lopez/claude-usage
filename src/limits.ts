@@ -215,6 +215,7 @@ export async function refreshFromApi(
     mode?: RefreshMode;
     staleMs?: number;
     timeoutMs?: number;
+    signal?: AbortSignal;
     nowMs?: number;
   } = {},
 ): Promise<RefreshOutcome> {
@@ -227,6 +228,7 @@ export async function refreshFromApi(
     tsMs: newest, tokenSource: null, httpStatus: null, error: null,
   };
 
+  if (opts.signal?.aborted) return { ...base, reason: "failed", error: "refresh cancelled" };
   if (mode === "off") return { ...base, reason: "disabled" };
 
   const staleMs = opts.staleMs ?? DEFAULT_STALE_MS;
@@ -250,7 +252,8 @@ export async function refreshFromApi(
   }
   if (waitMs > 0) return { ...base, reason: "guard", waitMs };
 
-  const token = await readToken({ nowMs: now });
+  const token = await readToken({ nowMs: now, signal: opts.signal });
+  if (opts.signal?.aborted) return { ...base, attempted: true, reason: "failed", error: "refresh cancelled" };
   if (!token) {
     return {
       ...base, attempted: true, reason: "no-token",
@@ -258,7 +261,7 @@ export async function refreshFromApi(
     };
   }
 
-  const res = await fetchUsage(token, { timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS });
+  const res = await fetchUsage(token, { timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, signal: opts.signal });
   if (!res.ok || !res.utilization) {
     return {
       ...base, attempted: true, reason: "failed",
@@ -268,6 +271,7 @@ export async function refreshFromApi(
 
   // The response has no timestamp of its own, so ours is the receipt time.
   const tsMs = Date.now();
+  if (opts.signal?.aborted) return { ...base, attempted: true, reason: "failed", error: "refresh cancelled" };
   recordUtilization(db, res.utilization, { source: "oauth-live", tsMs });
   return {
     ...base, attempted: true, ok: true, reason: "ok",

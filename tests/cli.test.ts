@@ -85,7 +85,7 @@ test("the CLI import graph never reaches react or ink", () => {
     for (const spec of specs) {
       if (spec.startsWith(".")) {
         visit(resolve(dirname(file), spec));
-      } else if (/^(react|ink)(\/|$)/.test(spec)) {
+      } else if (/^(react|ink|@inkjs\/ui)(\/|$)/.test(spec)) {
         offenders.push(`${file} -> ${spec}`);
       }
     }
@@ -150,7 +150,7 @@ test("the TUI entrypoint is a separate bin that exits cleanly", async () => {
   const p = Bun.spawn([BUN, "run", `${SRC}/tui.ts`], { stdout: "pipe", stderr: "pipe" });
   const stderr = await new Response(p.stderr).text();
   expect(await p.exited).toBe(2);
-  expect(stderr).toContain("phase 5");
+  expect(stderr).toContain("requires an interactive terminal");
 });
 
 test("unknown commands exit non-zero with usage", async () => {

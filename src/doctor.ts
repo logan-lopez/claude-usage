@@ -52,7 +52,7 @@ const defaults: DoctorDependencies = {
 export async function doctor(
   db: Database,
   file: string,
-  opts: { repo?: string; deps?: Partial<DoctorDependencies> } = {},
+  opts: { repo?: string; deps?: Partial<DoctorDependencies>; archiveOnly?: boolean } = {},
 ) {
   const deps = { ...defaults, now: Date.now(), ...opts.deps };
   const checks: Check[] = [];
@@ -122,7 +122,7 @@ export async function doctor(
     !build.sha || !head || build.dirty || build.sha !== head ? "warning" : "ok",
     `binary ${build.sha ?? "source invocation"}; built ${build.builtAt ?? "unstamped"}${build.dirty ? " (dirty checkout)" : ""}; repo HEAD ${head ?? "unavailable"}`,
   );
-  try {
+  if (!opts.archiveOnly) try {
     const present = await deps.credential();
     add(
       "credential",

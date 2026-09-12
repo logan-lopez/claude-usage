@@ -209,3 +209,15 @@ test("a busy archive cannot bypass the guard or turn a refresh failure into an e
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("an already cancelled refresh makes no attempt and consumes no guard", async () => {
+  const db = openDb(":memory:");
+  try {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await refreshFromApi(db, { mode: "force", signal: controller.signal });
+    expect(result.attempted).toBe(false);
+    expect(result.error).toBe("refresh cancelled");
+    expect(db.query("SELECT * FROM meta WHERE key=?").get(LAST_ATTEMPT)).toBeNull();
+  } finally { db.close(); }
+});
