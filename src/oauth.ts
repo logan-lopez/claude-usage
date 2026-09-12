@@ -79,8 +79,8 @@ function parseCredentials(text: string, source: Token["source"]): Token | null {
  * the command blocks on a GUI dialog forever, which under launchd means a job
  * that never exits -- hence the kill.
  */
-export async function fromKeychain(timeoutMs = 5_000): Promise<Token | null> {
-  if (process.platform !== "darwin") return null;
+export async function fromKeychain(timeoutMs = 5_000, signal?: AbortSignal): Promise<Token | null> {
+  if (signal?.aborted || process.platform !== "darwin") return null;
   // Lets a test pin the credential source, so a machine that happens to be
   // logged in cannot make a token-handling test pass for the wrong reason.
   if (process.env.CUSAGE_NO_KEYCHAIN) return null;
@@ -89,11 +89,17 @@ export async function fromKeychain(timeoutMs = 5_000): Promise<Token | null> {
       ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
       { stdout: "pipe", stderr: "ignore", stdin: "ignore" },
     );
-    const timer = setTimeout(() => p.kill(), timeoutMs);
-    const out = await new Response(p.stdout).text();
-    clearTimeout(timer);
-    if ((await p.exited) !== 0) return null;
-    return parseCredentials(out, "keychain");
+    const cancel = () => { p.kill(); };
+    const timer = setTimeout(cancel, timeoutMs);
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      const out = await new Response(p.stdout).text();
+      if ((await p.exited) !== 0 || signal?.aborted) return null;
+      return parseCredentials(out, "keychain");
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", cancel);
+    }
   } catch {
     return null;
   }
@@ -126,12 +132,12 @@ export function pickToken(candidates: (Token | null)[], nowMs: number): Token | 
 }
 
 export async function readToken(
-  opts: { nowMs?: number; file?: string; keychain?: boolean } = {},
+  opts: { nowMs?: number; file?: string; keychain?: boolean; signal?: AbortSignal } = {},
 ): Promise<Token | null> {
   const nowMs = opts.nowMs ?? Date.now();
   return pickToken(
     [
-      opts.keychain === false ? null : await fromKeychain(),
+      opts.keychain === false ? null : await fromKeychain(5_000, opts.signal),
       await fromFile(opts.file),
     ],
     nowMs,
@@ -149,7 +155,7 @@ export interface FetchResult {
 
 export async function fetchUsage(
   token: Token,
-  opts: { url?: string; timeoutMs?: number } = {},
+  opts: { url?: string; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<FetchResult> {
   const url = opts.url ?? USAGE_ENDPOINT;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -164,7 +170,7 @@ export async function fetchUsage(
         accept: "application/json",
         "user-agent": "cusage (github.com/loganpowell/claude-usage)",
       },
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       const body = redact((await res.text()).slice(0, 200));

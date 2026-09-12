@@ -20,7 +20,13 @@ for (const [entry, outfile] of [
   const result = await Bun.build({
     entrypoints: [entry],
     compile: { outfile },
-    define,
+    minify: true,
+    jsx: { development: false },
+    define: {
+      ...define,
+      "process.env.NODE_ENV": JSON.stringify("production"),
+      "process.env.DEV": JSON.stringify("false"),
+    },
   });
   if (!result.success)
     throw new AggregateError(result.logs, `failed to compile ${entry}`);

@@ -237,6 +237,59 @@ export function listSessions(db: Database, opts: SessionsOptions = {}): SessionR
     .all({ $since: since, $until: until, $project: project, $model: model, $limit: limit }) as SessionRow[];
 }
 
+/** Session filters choose identities; totals always include every request. */
+export type SessionSort = "activity" | "tokens" | "requests";
+export interface SessionPageOptions extends RequestFilters {
+  search?: string; sort?: SessionSort; offset?: number; pageSize?: number;
+}
+export function sessionPage(db: Database, opts: SessionPageOptions = {}) {
+  const where = `COALESCE(r.requests, 0) > 0
+    AND ($since IS NULL OR s.last_ts_ms >= $since)
+    AND ($until IS NULL OR s.last_ts_ms < $until)
+    AND ($project IS NULL OR instr(lower(COALESCE(s.project,'')), lower($project)) > 0)
+    AND ($model IS NULL OR EXISTS (SELECT 1 FROM requests mr WHERE mr.session_id=s.session_id AND instr(lower(COALESCE(mr.model,'')), lower($model)) > 0))
+    AND ($search = '' OR instr(lower(s.session_id), lower($search)) > 0 OR instr(lower(COALESCE(s.slug,'')), lower($search)) > 0)`;
+  const params = { $since: opts.since ?? null, $until: opts.until ?? null,
+    $project: opts.project ?? null, $model: opts.model ?? null, $search: opts.search ?? "" };
+  const order = opts.sort === "tokens" ? "r.total_tokens" : opts.sort === "requests" ? "r.requests" : "s.last_ts_ms";
+  const base = `${SESSION_SELECT} WHERE ${where}`;
+  const total = (db.query(`SELECT COUNT(*) n FROM (${base})`).get(params) as {n: number}).n;
+  const rows = db.query(`${base} ORDER BY ${order} DESC, s.session_id ASC LIMIT $size OFFSET $offset`)
+    .all({...params, $size: Math.max(1, Math.min(100, Math.trunc(opts.pageSize ?? 100))),
+      $offset: Math.max(0, Math.trunc(opts.offset ?? 0))}) as SessionRow[];
+  return { rows, total };
+}
+
+/** Bounded pricing work: no archive-wide request or tier scan. */
+export function sessionCosts(db: Database, ids: string[]): Record<string, CostRow> {
+  const result: Record<string, CostRow> = {};
+  const unique = [...new Set(ids)];
+  for (let start = 0; start < unique.length; start += 100) {
+    const chunk = unique.slice(start, start + 100);
+    const placeholders = chunk.map(() => "?").join(",");
+    const sessions = db.query(`SELECT session_id, total_cost_usd FROM sessions WHERE session_id IN (${placeholders})`).all(...chunk) as {session_id: string; total_cost_usd: number | null}[];
+    const tiers = new Set((db.query(`SELECT session_id, model FROM cost_state_models WHERE session_id IN (${placeholders}) AND model LIKE '%[1m]'`).all(...chunk) as {session_id: string; model: string}[])
+      .map(r => `${r.session_id}:${normalizeModel(r.model).replace('[1m]', '')}`));
+    for (const s of sessions) result[s.session_id] = {
+      key: s.session_id, basis: s.total_cost_usd === null ? "estimated" : "measured",
+      source: s.total_cost_usd === null ? "token estimate / committed pricing snapshot" : "cumulative session cost-state (keep-max)",
+      sessions: 1, requests: 0, cost_usd: s.total_cost_usd ?? 0, cost_complete: true,
+      sessions_split: 0, sessions_unpriced: 0, priced_requests: 0, unpriced_requests: 0, unknown_tier_requests: 0, reasons: [],
+    };
+    for (const raw of db.query(`SELECT * FROM requests WHERE session_id IN (${placeholders})`).all(...chunk) as PricedRequest[]) {
+      const row = result[raw.session_id]!; row.requests++;
+      if (row.basis === "measured") continue;
+      row.unknown_tier_requests++;
+      const estimate = estimateRequest(withTier(raw, tiers));
+      if (estimate.usd === null) {
+        row.unpriced_requests++; row.cost_complete = false;
+        if (!row.reasons.includes(estimate.reason!)) row.reasons.push(estimate.reason!);
+      } else { row.cost_usd += estimate.usd; row.priced_requests++; }
+    }
+  }
+  return result;
+}
+
 /**
  * Grouped roll-up.
  *
@@ -580,6 +633,8 @@ export interface LimitsHistory {
   /** Which model the weekly_scoped series belongs to, when there is one. */
   scopedModel: string | null;
   scopedSamples: number;
+  peaks: Pick<LimitBucket, "fiveHourPct" | "sevenDayPct" | "scopedPct">;
+  scopedSources: LimitsHistory["sources"];
   totalSamples: number;
   sources: { source: LimitSource; samples: number; firstTsMs: number; lastTsMs: number }[];
 }
@@ -614,6 +669,7 @@ export function limitsHistory(
     until?: number | null;
     bucketMs?: number | null;
     includeGlaze?: boolean;
+    scopedModel?: string | null;
     nowMs?: number;
   } = {},
 ): LimitsHistory {
@@ -638,14 +694,17 @@ export function limitsHistory(
       bucket: number; fh: number | null; sd: number | null; n: number;
     }[];
 
+  const binding = currentLimits(db, { nowMs })?.binding;
+  const scopedModel = opts.scopedModel ?? (binding?.kind === "weekly_scoped" ? binding.scope_model || null : null) ??
+    (db.query("SELECT scope_model FROM limit_scoped WHERE kind='weekly_scoped' AND ts_ms <= ? ORDER BY ts_ms DESC, scope_model LIMIT 1").get(until) as {scope_model: string} | null)?.scope_model ?? null;
   const scopedRows = db
     .query(
       `SELECT (ts_ms / $b) * $b AS bucket, MAX(percent) AS p
          FROM limit_scoped
-        WHERE kind = 'weekly_scoped' AND ts_ms >= $since AND ts_ms <= $until
+        WHERE kind = 'weekly_scoped' AND scope_model = $model AND ts_ms >= $since AND ts_ms <= $until
         GROUP BY bucket`,
     )
-    .all({ $b: bucketMs, $since: since, $until: until }) as
+    .all({ $b: bucketMs, $since: since, $until: until, $model: scopedModel }) as
       { bucket: number; p: number | null }[];
 
   const byBucket = new Map(rows.map((r) => [r.bucket, r]));
@@ -668,10 +727,10 @@ export function limitsHistory(
   const scopedMeta = db
     .query(
       `SELECT scope_model, COUNT(*) AS n FROM limit_scoped
-        WHERE kind = 'weekly_scoped' AND ts_ms >= $since AND ts_ms <= $until
+        WHERE kind = 'weekly_scoped' AND scope_model = $model AND ts_ms >= $since AND ts_ms <= $until
         GROUP BY scope_model ORDER BY n DESC LIMIT 1`,
     )
-    .get({ $since: since, $until: until }) as { scope_model: string; n: number } | null;
+    .get({ $since: since, $until: until, $model: scopedModel }) as { scope_model: string; n: number } | null;
 
   const sources = db
     .query(
@@ -686,8 +745,14 @@ export function limitsHistory(
 
   return {
     since, until, bucketMs, buckets,
-    scopedModel: scopedMeta?.scope_model || null,
+    scopedModel,
     scopedSamples: scopedMeta?.n ?? 0,
+    peaks: Object.fromEntries((["fiveHourPct", "sevenDayPct", "scopedPct"] as const).map(key => {
+      return [key, buckets.reduce<number | null>((peak, bucket) => bucket[key] === null ? peak : Math.max(peak ?? -Infinity, bucket[key]), null)];
+    })) as LimitsHistory["peaks"],
+    scopedSources: db.query(`SELECT source, COUNT(*) samples, MIN(ts_ms) firstTsMs, MAX(ts_ms) lastTsMs
+      FROM limit_scoped WHERE kind='weekly_scoped' AND scope_model=? AND ts_ms>=? AND ts_ms<=?
+      GROUP BY source ORDER BY lastTsMs DESC`).all(scopedModel, since, until) as LimitsHistory["sources"],
     totalSamples: rows.reduce((a, r) => a + r.n, 0),
     sources,
   };
@@ -698,6 +763,7 @@ export function archiveStats(db: Database) {
   return {
     requests: one<{ c: number }>("SELECT COUNT(*) c FROM requests").c,
     sessions: one<{ c: number }>("SELECT COUNT(*) c FROM sessions").c,
+    projects: one<{ c: number }>("SELECT COUNT(DISTINCT project) c FROM sessions").c,
     sessionsWithCost: one<{ c: number }>(
       "SELECT COUNT(*) c FROM sessions WHERE total_cost_usd IS NOT NULL",
     ).c,

@@ -1,3 +1,8 @@
+## 2026-09-11
+* **Update**: Linked `architecture/ink-session-explorer.md` to `architecture/cli-reports-and-binary-install.md` (Retains the separate executable and plain-data reporting boundaries.).
+* **Update**: Updated concept `architecture/ink-session-explorer.md`.
+* **Creation**: Documented concept `architecture/ink-session-explorer.md` (Ink session explorer browses read-only with identity-preserving state).
+
 ## 2026-09-10
 * **Update**: Updated concept `architecture/cli-reports-and-binary-install.md` (estimator errors scored over fully priced sessions only; statusline drops cost for tokens; schema v3 join indexes for tool attribution).
 * **Update**: Updated concept `architecture/grouped-cost-is-exact-or-absent.md`.

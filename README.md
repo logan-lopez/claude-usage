@@ -46,8 +46,7 @@ cusage sync                 # first sync: ~2s for a 240 MB corpus
 Launch agents execute `~/.local/bin/cusage` with `$HOME` as their working
 directory. Archiving a Conductor worktree no longer removes their executable
 or working directory. `make install` does not reload launch agents; rerun the
-installer once to migrate existing plists. The TUI binary remains a separate
-phase-5 stub, not part of the CLI import graph.
+installer once to migrate existing plists. The TUI binary is a separate executable, not part of the CLI import graph.
 
 Every build embeds its Git SHA, build time, source checkout and dirty flag.
 `cusage doctor --repo /path/to/checkout` compares against that checkout's HEAD;
@@ -58,6 +57,74 @@ or dirty build is a warning, not a silently trusted build. Rebuild after edits.
 The archive lives at `~/.local/share/claude-usage/usage.db` — outside the repo,
 because it is data, not config. Override with `$CUSAGE_DB`. Removing the agents
 (`scripts/uninstall-agents.sh`) never touches it.
+
+## Terminal explorer
+
+```bash
+bun src/tui.ts --db ~/.local/share/claude-usage/usage.db
+./dist/cusage-tui           # after make build; no installation required
+./dist/cusage-tui --help
+NO_COLOR=1 ./dist/cusage-tui # or --no-color
+```
+
+The explorer has **1 Overview**, **2 Sessions**, and Session Detail. It requires
+an interactive terminal of at least **80×24**. At **110×36** and above, Overview
+shows all five panels; smaller terminals show one panel at a time. Tab and
+Shift+Tab switch panels or Detail sections. Resize preserves browsing state.
+
+| Key | Action |
+|---|---|
+| `1`, `2` | Overview / Sessions |
+| `Tab`, `Shift+Tab` | Change focused panel or Detail section |
+| arrows, `j` / `k`, PageUp / PageDown, Home / End | Select or scroll |
+| Enter / Esc | Open session / return or cancel overlay |
+| `/`, `f`, `s` | Sessions search, filters, sorting |
+| left / right | Select attribution dimension in Detail |
+| `r` | Reread archive and rerun credential-free diagnostics |
+| `R` | Explicit guarded limit fetch; disabled by `CUSAGE_REFRESH=off` |
+| `?`, `q`, Ctrl+C | Contextual help / quit |
+
+Inputs and overlays own shortcuts: typing `q` or `1` into search does not quit
+or navigate. Enter applies edits; Esc cancels. Ctrl+C always quits.
+
+Search matches session ID or name, case-insensitively. Project and model filters
+are separate substring filters. Activity is All (default), Today UTC, Last 7
+days, or Last 30 days. Sorting is last activity, tokens, or requests descending,
+with session ID breaking ties. Navigation fetches 100-row pages without a
+30-session cap. Filters select sessions; **amounts remain whole-session totals**,
+not spend within the activity window. Detail/back and archive rereads retain
+selection by session ID where possible.
+
+Costs show measured `$`, estimated `~$`, partial `+`, or `unavailable` when wholly
+unpriced. Measured and estimated subtotals never blend. Detail discloses unknown
+rates and context tiers. Tool sections show call counts, not assigned token
+consumption. Session API blocks are not server five-hour windows.
+
+Browsing opens the archive read-only using `--db`, `CUSAGE_DB`, or the default
+path. Missing or incompatible archives require `cusage sync`; the explorer does
+not create or migrate them. External changes are checked every five seconds.
+`r` does not ingest transcripts or fetch limits. Only `R` opens a short-lived
+writable connection and uses the existing cross-process attempt floor. Pending
+fetches are cancelled on quit. Recoverable failures leave the last successful
+data visible, marked outdated. Ordinary diagnostics never probe credentials.
+
+Overview shows sourced, aged limits; actual archive diagnostics; 72 hourly peak
+buckets with gaps preserved; 30 UTC days of archived output (today partial); and
+six recent sessions. “Latest archived request” is not a successful-sync time.
+
+### TUI verification
+
+`bun test` includes fixed-clock/dimension Ink interaction tests and scrubbed
+fixture queries. `make build` creates both executables. For native PTY startup,
+resize, navigation, cursor and terminal-mode restoration checks:
+
+```bash
+python3 tools/tui-pty-smoke.py /path/to/scrubbed-fixture.db
+```
+
+Use a scrubbed fixture archive for this test, not a live archive. The full
+accepted scope is preserved in [BRIEFING-3](docs/BRIEFING-3.md). Installation and
+launch-agent changes are separate from building and validating the explorer.
 
 ## Where the data comes from
 
@@ -409,6 +476,7 @@ itself.
 | 2 | `session`, `sessions`, `limits`, `limits --history`, `status` | done |
 | 3 | pricing snapshot, `cost`, frozen aggregate calibration | done |
 | 4 | attribution, timeline/aliases, export, cycles, cache, doctor, statusline, binaries | done |
-| 5 | Ink TUI | not started |
+| 5A | Ink TUI: Overview, Sessions, Session Detail | done |
 
-The TUI remains out of scope. `pricing --refresh` was cancelled; pricing refresh is developer-only.
+Future TUI tabs, grouped sessions, mouse support and the command prompt remain deferred.
+`pricing --refresh` was cancelled; pricing refresh is developer-only.
