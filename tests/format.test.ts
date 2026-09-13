@@ -8,7 +8,7 @@ import {
 } from "../src/query.ts";
 import { snapshotOauthCache } from "../src/limits.ts";
 import { openDb } from "../src/schema.ts";
-import { FIXTURES, freshDb } from "./helpers.ts";
+import { FIXTURES, freshDb, unknownModelCostDb } from "./helpers.ts";
 
 setColour(false);
 
@@ -82,6 +82,19 @@ test("renderSession says so when a session has no cost-state", () => {
   const out = renderSession(getSession(db, row.session_id)!);
   expect(out).toContain("estimated");
   expect(out).not.toContain("measured");
+});
+
+test("renderSession never calls a fallback-priced cost-state total measured", () => {
+  const db = unknownModelCostDb();
+  const local = renderSession(getSession(db, "local")!);
+  expect(local).toContain("unpriced");
+  expect(local).not.toContain("measured —");
+  // The per-model table still shows Claude Code's archived guess beside the
+  // note; what must go is the bold headline total that read as spend.
+  expect(local).not.toMatch(/^ {2}\$0\.96 /m);
+  expect(renderSession(getSession(db, "known")!)).toContain("measured —");
+  expect(renderSessions(listSessions(db))).toMatch(/local.*est/);
+  db.close();
 });
 
 test("renderSessions and renderLimits produce one header plus rows", () => {

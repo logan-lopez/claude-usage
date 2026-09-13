@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
-import { getSession, groupSessions, listSessions, resolveSessionId } from "../src/query.ts";
-import { baseline, freshDb } from "./helpers.ts";
+import {
+  archiveStats, cost, estimatorAudit, getSession, groupSessions, listSessions, resolveSessionId, sessionCosts,
+} from "../src/query.ts";
+import { baseline, freshDb, unknownModelCostDb } from "./helpers.ts";
 
 test("per-session totals match the independent baseline, session by session", () => {
   const db = freshDb();
@@ -99,5 +101,44 @@ test("costBasis says measured only when a cost-state record exists", () => {
     expect(`${id}:${d.costBasis}`).toBe(
       `${id}:${d.session.total_cost_usd !== null ? "measured" : "estimated"}`,
     );
+  }
+});
+
+test("a cost-state total Claude Code flagged hasUnknownModelCost is never measured", () => {
+  // Found on a real LM Studio run: Claude Code priced qwen/qwen3.8-27b at Opus
+  // rates, set the flag, and every view printed $0.96 as exact spend. Each
+  // assertion is one reader of "measured"; a reader that goes back to the bare
+  // column fails its own line.
+  const db = unknownModelCostDb();
+  try {
+    const local = getSession(db, "local")!;
+    expect(local.costBasis).toBe("estimated");
+    expect(local.unknownModelCost).toBe(true);
+    expect(local.session.total_cost_usd).toBeNull();
+    // Claude Code's per-model record is still archived, just not believed.
+    expect(local.costModels[0]!.cost_usd).toBeCloseTo(0.9639155, 8);
+    const known = getSession(db, "known")!;
+    expect(known.costBasis).toBe("measured");
+    expect(known.unknownModelCost).toBe(false);
+
+    const costs = sessionCosts(db, ["known", "local"]);
+    expect(costs.known!.basis).toBe("measured");
+    expect(costs.local!.basis).toBe("estimated");
+    expect(costs.local!.priced_requests).toBe(0);
+    expect(costs.local!.cost_complete).toBe(false);
+
+    const report = cost(db, { by: "session" });
+    expect(report.totals.measured).toBeCloseTo(0.9639155, 8);
+    expect(report.totals.estimated).toBe(0);
+    expect(report.rows.find((r) => r.key === "local")!.basis).toBe("estimated");
+
+    const groups = groupSessions(db, "model");
+    expect(groups.find((r) => r.key === "qwen/qwen3.8-27b")!.sessions_unpriced).toBe(1);
+    expect(groups.reduce((n, r) => n + r.cost_usd, 0)).toBeCloseTo(0.9639155, 8);
+
+    expect(archiveStats(db).sessionsWithCost).toBe(1);
+    expect(estimatorAudit(db).sessions).toBe(1);
+  } finally {
+    db.close();
   }
 });

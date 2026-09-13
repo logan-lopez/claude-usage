@@ -167,7 +167,9 @@ export function renderSession(detail: SessionDetail): string {
       { header: "cache w", get: (r) => num(r.cache_creation_input_tokens), align: "right" },
       { header: "cache r", get: (r) => num(r.cache_read_input_tokens), align: "right" },
     ], "  "));
-    out.push(`  ${b(usd(s.total_cost_usd))} ${d("measured — from this session's cost-state record")}`);
+    out.push(detail.unknownModelCost
+      ? `  ${d("unpriced — Claude Code had no rate for a model here and charged it a fallback rate; these are its guesses, not a measurement (see `cusage cost`)")}`
+      : `  ${b(usd(s.total_cost_usd))} ${d("measured — from this session's cost-state record")}`);
   } else {
     out.push(`  ${d("no cost-state record for this session; pricing is estimated (see `cusage cost`)")}`);
   }

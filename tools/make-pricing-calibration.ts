@@ -4,11 +4,12 @@
  */
 import { Database } from "bun:sqlite";
 import { paths } from "../src/paths.ts";
+import { MEASURED_COST } from "../src/query.ts";
 const db = new Database(paths.db, { readonly: true });
 try {
   const sessions = db
     .query(
-      "SELECT session_id, total_cost_usd FROM sessions WHERE total_cost_usd IS NOT NULL ORDER BY session_id",
+      `SELECT session_id, ${MEASURED_COST} AS total_cost_usd FROM sessions WHERE ${MEASURED_COST} IS NOT NULL ORDER BY session_id`,
     )
     .all() as { session_id: string; total_cost_usd: number }[];
   const rows = sessions.map((session) => {

@@ -84,8 +84,12 @@ export interface SessionDetail {
     thinking_tokens: number; cache_read_input_tokens: number;
     cache_creation_input_tokens: number; web_search_requests: number;
   }[];
-  /** 'measured' when cost-state exists for this session, else 'estimated'. */
+  /** 'measured' when cost-state exists for this session and priced every
+   *  model it saw, else 'estimated'. */
   costBasis: "measured" | "estimated";
+  /** cost-state exists but Claude Code priced an unknown model at a fallback
+   *  rate, so costModels holds its guess rather than a measurement. */
+  unknownModelCost: boolean;
 }
 
 const TOTALS_SELECT = `
@@ -99,6 +103,20 @@ const TOTALS_SELECT = `
   COALESCE(SUM(ephemeral_1h), 0)          AS ephemeral_1h,
   COALESCE(SUM(total_tokens), 0)          AS total_tokens
 `;
+
+/**
+ * cost-state's session total, but only where Claude Code could actually price
+ * it. `hasUnknownModelCost` means a model it has no rate for was charged at
+ * some other model's rate, so the total is a guess written down as a fact.
+ * Both observed cases match to the last digit: a local Qwen model at Opus-tier
+ * rates, and claude-fable-5-1 on 2.1.252 -- released after that build -- at
+ * Sonnet 5 rates, $5.64 against ~$16.85. The fallback is not even a consistent
+ * overestimate, so there is nothing to correct for. Such a session has
+ * no measurement and falls through to the estimator, which declines unknown
+ * models instead of inventing a price. Every reader of "measured" goes through
+ * this; reading sessions.total_cost_usd bare reintroduces the bug.
+ */
+export const MEASURED_COST = "CASE WHEN has_unknown_model_cost = 1 THEN NULL ELSE total_cost_usd END";
 
 export function corpusTotals(db: Database, since: number | null = null): TokenTotals {
   return db
@@ -132,7 +150,7 @@ export function resolveSessionId(db: Database, ref: string | null): string | nul
 
 const SESSION_SELECT = `
   SELECT s.session_id, s.slug, s.project, s.cwd, s.git_branch, s.entrypoint,
-         s.first_ts, s.last_ts, s.total_cost_usd,
+         s.first_ts, s.last_ts, ${MEASURED_COST} AS total_cost_usd,
          s.total_duration_ms, s.total_api_duration_ms, s.total_tool_duration_ms,
          s.total_lines_added, s.total_lines_removed,
          (SELECT GROUP_CONCAT(m, ', ') FROM
@@ -211,6 +229,7 @@ export function getSession(db: Database, sessionId: string): SessionDetail | nul
     sidechain: half("is_sidechain = 1"),
     costModels,
     costBasis: session.total_cost_usd !== null ? "measured" : "estimated",
+    unknownModelCost: (db.query("SELECT COALESCE(has_unknown_model_cost, 0) = 1 AS u FROM sessions WHERE session_id=?").get(sessionId) as { u: number }).u === 1,
   };
 }
 
@@ -267,7 +286,7 @@ export function sessionCosts(db: Database, ids: string[]): Record<string, CostRo
   for (let start = 0; start < unique.length; start += 100) {
     const chunk = unique.slice(start, start + 100);
     const placeholders = chunk.map(() => "?").join(",");
-    const sessions = db.query(`SELECT session_id, total_cost_usd FROM sessions WHERE session_id IN (${placeholders})`).all(...chunk) as {session_id: string; total_cost_usd: number | null}[];
+    const sessions = db.query(`SELECT session_id, ${MEASURED_COST} AS total_cost_usd FROM sessions WHERE session_id IN (${placeholders})`).all(...chunk) as {session_id: string; total_cost_usd: number | null}[];
     const tiers = new Set((db.query(`SELECT session_id, model FROM cost_state_models WHERE session_id IN (${placeholders}) AND model LIKE '%[1m]'`).all(...chunk) as {session_id: string; model: string}[])
       .map(r => `${r.session_id}:${normalizeModel(r.model).replace('[1m]', '')}`));
     for (const s of sessions) result[s.session_id] = {
@@ -319,7 +338,7 @@ export function groupSessions(
   for (const id of new Set(memberships.map(r => r.session_id))) {
     const all = db.query(`SELECT COUNT(*) n, COUNT(DISTINCT COALESCE(${column}, '(unknown)')) groups FROM requests WHERE session_id=$id`).get({ $id: id }) as { n: number; groups: number };
     const selected = db.query(`SELECT COUNT(*) n FROM requests WHERE session_id=$id AND ${w.sql}`).get({ ...w.params, $id: id }) as { n: number };
-    const cost = db.query("SELECT total_cost_usd FROM sessions WHERE session_id=?").get(id) as { total_cost_usd: number | null } | null;
+    const cost = db.query(`SELECT ${MEASURED_COST} AS total_cost_usd FROM sessions WHERE session_id=?`).get(id) as { total_cost_usd: number | null } | null;
     costs.set(id, exactSessionCost(cost?.total_cost_usd ?? null, all.groups, all.n === selected.n));
   }
   return totals.map(t => {
@@ -765,7 +784,7 @@ export function archiveStats(db: Database) {
     sessions: one<{ c: number }>("SELECT COUNT(*) c FROM sessions").c,
     projects: one<{ c: number }>("SELECT COUNT(DISTINCT project) c FROM sessions").c,
     sessionsWithCost: one<{ c: number }>(
-      "SELECT COUNT(*) c FROM sessions WHERE total_cost_usd IS NOT NULL",
+      `SELECT COUNT(*) c FROM sessions WHERE ${MEASURED_COST} IS NOT NULL`,
     ).c,
     toolCalls: one<{ c: number }>("SELECT COUNT(*) c FROM tool_calls").c,
     limitSamples: one<{ c: number }>("SELECT COUNT(*) c FROM limit_samples").c,
@@ -964,7 +983,7 @@ export function cost(db: Database, opts: RequestFilters & { by?: "model" | "proj
   const w = requestWhere(opts);
   const selected = (db.query(`SELECT * FROM requests WHERE ${w.sql}`).all(w.params) as PricedRequest[]).map(r => withTier(r, tiers));
   const key = (row: PricedRequest) => by === "model" ? row.model ?? "(unknown)" : by === "project" ? row.project ?? "(unknown)" : by === "session" ? row.session_id : row.ts_ms === null ? "(unknown)" : new Date(row.ts_ms).toISOString().slice(0, 10);
-  const sessions = new Map((db.query("SELECT session_id, total_cost_usd FROM sessions").all() as { session_id: string; total_cost_usd: number | null }[]).map(r => [r.session_id, r.total_cost_usd]));
+  const sessions = new Map((db.query(`SELECT session_id, ${MEASURED_COST} AS total_cost_usd FROM sessions`).all() as { session_id: string; total_cost_usd: number | null }[]).map(r => [r.session_id, r.total_cost_usd]));
   const selectedBySession = new Map<string, PricedRequest[]>();
   for (const row of selected) { const rs = selectedBySession.get(row.session_id) ?? []; rs.push(row); selectedBySession.set(row.session_id, rs); }
   const grouped = new Map<string, CostRow>();
@@ -1026,7 +1045,7 @@ export function cost(db: Database, opts: RequestFilters & { by?: "model" | "proj
  */
 export function estimatorAudit(db: Database) {
   const tiers = contextTiers(db);
-  const sessions = db.query("SELECT session_id, total_cost_usd FROM sessions WHERE total_cost_usd IS NOT NULL ORDER BY session_id").all() as { session_id: string; total_cost_usd: number }[];
+  const sessions = db.query(`SELECT session_id, ${MEASURED_COST} AS total_cost_usd FROM sessions WHERE ${MEASURED_COST} IS NOT NULL ORDER BY session_id`).all() as { session_id: string; total_cost_usd: number }[];
   const rows = sessions.map(session => {
     const requests = db.query("SELECT * FROM requests WHERE session_id=?").all(session.session_id) as PricedRequest[];
     let estimated = 0, unpriced = 0;
