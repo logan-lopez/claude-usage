@@ -1,7 +1,8 @@
-import React, { useEffect } from "react";
+/** Presentational primitives. Plain props in, Ink elements out. */
+import React, { memo } from "react";
 import { Box, Text } from "ink";
-import stringWidth from "string-width";
 import type { CostRow, SessionRow } from "../query.ts";
+import { age, costLabel, fit, num, wrap } from "./text.ts";
 
 export const palette = {
   text: "#edede9",
@@ -12,66 +13,9 @@ export const palette = {
 };
 export type Tone = keyof typeof palette;
 export type Line = { text: string; tone?: Tone };
-export const clean = (s: unknown) =>
-  String(s ?? "—").replace(/[\u0000-\u001f\u007f-\u009f]/g, " ");
-const segments = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-export function fit(value: unknown, width: number, pad = false) {
-  const text = clean(value);
-  let out = "";
-  let used = 0;
-  const truncated = stringWidth(text) > width;
-  for (const { segment } of segments.segment(text)) {
-    const n = stringWidth(segment);
-    if (used + n > width - (truncated ? 1 : 0)) break;
-    out += segment;
-    used += n;
-  }
-  if (truncated && width > 0) {
-    out += "…";
-    used++;
-  }
-  return out + (pad ? " ".repeat(Math.max(0, width - used)) : "");
-}
-export function wrap(value: string, width: number): string[] {
-  const result: string[] = [];
-  let line = "";
-  let used = 0;
-  for (const { segment } of segments.segment(clean(value))) {
-    const n = stringWidth(segment);
-    if (used + n > width && line) {
-      result.push(line);
-      line = "";
-      used = 0;
-    }
-    line += segment;
-    used += n;
-  }
-  result.push(line);
-  return result;
-}
-export const num = (n: number) =>
-  n >= 1e6
-    ? `${(n / 1e6).toFixed(1)}M`
-    : n >= 1e3
-      ? `${(n / 1e3).toFixed(1)}K`
-      : String(n);
-export const age = (timestamp: number | null, now: number) =>
-  timestamp === null
-    ? "unknown age"
-    : timestamp > now
-      ? "future timestamp"
-      : now - timestamp < 60_000
-        ? "just now"
-        : now - timestamp < 3_600_000
-          ? `${Math.floor((now - timestamp) / 60_000)}m ago`
-          : now - timestamp < 86_400_000
-            ? `${Math.floor((now - timestamp) / 3_600_000)}h ago`
-            : `${Math.floor((now - timestamp) / 86_400_000)}d ago`;
-export const costLabel = (c: CostRow | undefined) =>
-  !c || (c.basis === "estimated" && c.priced_requests === 0)
-    ? "unavailable"
-    : `${c.basis === "estimated" ? "~" : ""}$${c.cost_usd.toFixed(2)}${c.cost_complete ? "" : "+"}`;
-export function Row({
+export const line = (text: string, tone?: Tone): Line => ({ text, tone });
+
+export const Row = memo(function Row({
   text,
   width,
   tone = "text",
@@ -93,7 +37,8 @@ export function Row({
       {fit(text, width)}
     </Text>
   );
-}
+});
+
 export function Section({
   title,
   width,
@@ -126,37 +71,38 @@ export function Section({
     </Box>
   );
 }
+
+/** Wrap logical lines into terminal rows. Callers memoize this and size scrolling from it. */
+export const wrapLines = (lines: Line[], width: number): Line[] =>
+  lines.flatMap((l) => wrap(l.text, width).map((text) => ({ ...l, text })));
+
+/** A viewport of `height` shows `height - 1` rows; the last row is the position indicator. */
+export const scrollMax = (rows: Line[], height: number) =>
+  Math.max(0, rows.length - Math.max(1, height - 1));
+
 export function Viewport({
-  lines,
+  rows,
   offset,
   width,
   height,
   mono,
-  onRange,
 }: {
-  lines: Line[];
+  rows: Line[];
   offset: number;
   width: number;
   height: number;
   mono: boolean;
-  onRange?: (max: number) => void;
 }) {
-  const expanded = lines.flatMap((l) =>
-    wrap(l.text, width).map((text) => ({ ...l, text })),
-  );
-  const max = Math.max(0, expanded.length - Math.max(1, height - 1));
-  useEffect(() => {
-    onRange?.(max);
-  }, [max, onRange]);
-  const start = Math.min(offset, max);
+  const visible = Math.max(1, height - 1);
+  const start = Math.min(offset, scrollMax(rows, height));
   return (
     <Box flexDirection="column" height={height} overflow="hidden">
-      {expanded.slice(start, start + height - 1).map((l, i) => (
-        <Row key={i} {...l} width={width} mono={mono} />
+      {rows.slice(start, start + visible).map((l, i) => (
+        <Row key={i} text={l.text} tone={l.tone} width={width} mono={mono} />
       ))}
-      {expanded.length > height - 1 && (
+      {rows.length > visible && (
         <Row
-          text={`↑↓ ${start + 1}–${Math.min(expanded.length, start + height - 1)} / ${expanded.length}`}
+          text={`↑↓ ${start + 1}–${Math.min(rows.length, start + visible)} / ${rows.length}`}
           width={width}
           mono={mono}
           tone="muted"
@@ -165,30 +111,8 @@ export function Viewport({
     </Box>
   );
 }
-export function Sparkline({
-  values,
-  width,
-  mono,
-}: {
-  values: (number | null)[];
-  width: number;
-  mono: boolean;
-}) {
-  const bars = "▁▂▃▄▅▆▇█";
-  return (
-    <Row
-      width={width}
-      mono={mono}
-      text={values
-        .map((n) =>
-          n === null
-            ? "·"
-            : bars[Math.max(0, Math.min(7, Math.floor((n / 100) * 7)))],
-        )
-        .join("")}
-    />
-  );
-}
+
+/** One string per chart row, with the last (partial) bucket in the accent colour. */
 export function BarChart({
   values,
   width,
@@ -200,37 +124,32 @@ export function BarChart({
   height: number;
   mono: boolean;
 }) {
+  if (!values.length) return null;
   const peak = Math.max(1, ...values);
   const step = Math.max(1, Math.floor(width / values.length));
+  const cell = (v: number, i: number) =>
+    (v > 0 && (v / peak) * height >= height - i
+      ? "█"
+      : i === height - 1
+        ? "─"
+        : " "
+    ).repeat(Math.max(1, step - 1)) + (step > 1 ? " " : "");
+  const history = values.slice(0, -1);
+  const today = values.at(-1)!;
   return (
     <Box flexDirection="column">
       {Array.from({ length: height }, (_, i) => (
         <Text key={i}>
-          {values.map((v, j) => (
-            <Text
-              key={j}
-              color={
-                mono
-                  ? undefined
-                  : j === values.length - 1
-                    ? palette.accent
-                    : palette.muted
-              }
-            >
-              {(v > 0 && (v / peak) * height >= height - i
-                ? "█"
-                : i === height - 1
-                  ? "─"
-                  : " "
-              ).repeat(Math.max(1, step - 1))}
-              {step > 1 ? " " : ""}
-            </Text>
-          ))}
+          <Text color={mono ? undefined : palette.muted}>
+            {history.map((v) => cell(v, i)).join("")}
+          </Text>
+          <Text color={mono ? undefined : palette.accent}>{cell(today, i)}</Text>
         </Text>
       ))}
     </Box>
   );
 }
+
 export function SessionTable({
   rows,
   costs,
@@ -249,7 +168,7 @@ export function SessionTable({
   mono: boolean;
 }) {
   const nameWidth = Math.max(13, width - 60);
-  const line = (
+  const cells = (
     when: string,
     name: string,
     model: string,
@@ -262,14 +181,7 @@ export function SessionTable({
   return (
     <Box flexDirection="column" height={height} overflow="hidden">
       <Row
-        text={line(
-          "Activity",
-          "Name / project",
-          "Models",
-          "Reqs",
-          "Tokens",
-          "Cost",
-        )}
+        text={cells("Activity", "Name / project", "Models", "Reqs", "Tokens", "Cost")}
         width={width}
         tone="muted"
         mono={mono}
@@ -277,7 +189,7 @@ export function SessionTable({
       {rows.map((r) => (
         <Row
           key={r.session_id}
-          text={line(
+          text={cells(
             age(r.last_ts ? Date.parse(r.last_ts) : null, now),
             `${r.slug ?? r.session_id} / ${r.project ?? "—"}`,
             r.models ?? "—",

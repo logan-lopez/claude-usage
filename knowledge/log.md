@@ -1,3 +1,7 @@
+## 2026-09-29
+* **Update**: Updated concept `architecture/cli-reports-and-binary-install.md` (compiled binaries are re-signed ad hoc; Bun 1.3 output is otherwise killed at exec on macOS).
+* **Update**: Updated concept `architecture/ink-session-explorer.md` (TUI split into shell, hooks and per-screen modules; string-width patched for render cost; key routing via layout effect; query-only fallback for WAL archives without sidecars).
+
 ## 2026-09-11
 * **Update**: Linked `architecture/ink-session-explorer.md` to `architecture/cli-reports-and-binary-install.md` (Retains the separate executable and plain-data reporting boundaries.).
 * **Update**: Updated concept `architecture/ink-session-explorer.md`.

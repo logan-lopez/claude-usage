@@ -1,0 +1,82 @@
+diff --git a/index.js b/index.js
+index 42ec3a1194234c0dd1187f00bbe42a62f0a18a70..2a06202cd19bc8160845c8be3e50ebedf9eb926a 100644
+--- a/index.js
++++ b/index.js
+@@ -147,6 +147,36 @@ function trailingWidth(visibleSegment, eastAsianWidthOptions) {
+ 	return extra;
+ }
+ 
++// cusage patch: memoize per-cluster widths. The Unicode property regexes below
++// (especially /^\p{RGI_Emoji}$/v) are very slow under JavaScriptCore, and Ink
++// measures every text node on every frame. A cluster's width depends only on
++// the cluster and the ambiguous-width option, so the result is identical.
++const clusterWidthCache = [new Map(), new Map()];
++const CLUSTER_CACHE_LIMIT = 4096;
++
++function clusterWidth(segment, eastAsianWidthOptions) {
++	// Zero-width / non-printing clusters
++	if (isZeroWidthCluster(segment)) {
++		return 0;
++	}
++
++	// Emoji width logic
++	if (rgiEmojiRegex.test(segment) || isDoubleWidthNonRgiEmojiSequence(segment)) {
++		return 2;
++	}
++
++	const visibleSegment = baseVisible(segment);
++	const hangulWidth = hangulClusterWidth(visibleSegment, eastAsianWidthOptions);
++	if (hangulWidth !== undefined) {
++		return hangulWidth;
++	}
++
++	// Everything else: EAW of the cluster’s first visible scalar
++	const codePoint = visibleSegment.codePointAt(0);
++	// Add width for trailing spacing marks and Halfwidth/Fullwidth Forms (e.g., ﾞ, ﾟ, ｰ)
++	return eastAsianWidth(codePoint, eastAsianWidthOptions) + trailingWidth(visibleSegment, eastAsianWidthOptions);
++}
++
+ export default function stringWidth(input, options = {}) {
+ 	if (typeof input !== 'string' || input.length === 0) {
+ 		return 0;
+@@ -176,31 +206,19 @@ export default function stringWidth(input, options = {}) {
+ 	let width = 0;
+ 	const eastAsianWidthOptions = {ambiguousAsWide: !ambiguousIsNarrow};
+ 
++	const cache = clusterWidthCache[ambiguousIsNarrow ? 0 : 1];
+ 	for (const {segment} of segmenter.segment(string)) {
+-		// Zero-width / non-printing clusters
+-		if (isZeroWidthCluster(segment)) {
+-			continue;
+-		}
+-
+-		// Emoji width logic
+-		if (rgiEmojiRegex.test(segment) || isDoubleWidthNonRgiEmojiSequence(segment)) {
+-			width += 2;
+-			continue;
+-		}
++		let segmentWidth = cache.get(segment);
++		if (segmentWidth === undefined) {
++			segmentWidth = clusterWidth(segment, eastAsianWidthOptions);
++			if (cache.size >= CLUSTER_CACHE_LIMIT) {
++				cache.clear();
++			}
+ 
+-		const visibleSegment = baseVisible(segment);
+-		const hangulWidth = hangulClusterWidth(visibleSegment, eastAsianWidthOptions);
+-		if (hangulWidth !== undefined) {
+-			width += hangulWidth;
+-			continue;
++			cache.set(segment, segmentWidth);
+ 		}
+ 
+-		// Everything else: EAW of the cluster’s first visible scalar
+-		const codePoint = visibleSegment.codePointAt(0);
+-		width += eastAsianWidth(codePoint, eastAsianWidthOptions);
+-
+-		// Add width for trailing spacing marks and Halfwidth/Fullwidth Forms (e.g., ﾞ, ﾟ, ｰ)
+-		width += trailingWidth(visibleSegment, eastAsianWidthOptions);
++		width += segmentWidth;
+ 	}
+ 
+ 	return width;

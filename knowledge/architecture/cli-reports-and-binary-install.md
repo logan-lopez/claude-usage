@@ -19,6 +19,12 @@ worktree. Build SHA, time, source path and dirty state are embedded; doctor
 compares the build against repo HEAD. Building is not installing or reloading
 existing agents.
 
+On macOS, Bun 1.3's compiled output fails `codesign -v` ("code or signature have
+been modified"), and arm64 kills such executables at exec with SIGKILL (exit
+137) before they print anything. tools/build.ts re-signs each binary ad hoc
+after compiling. Binaries installed before 2026-09-29 predate this fix; rebuild
+and reinstall before pointing launchd at them.
+
 ## Reporting provenance
 
 Attribution and other grouped views expose full-selection request coverage,

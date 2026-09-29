@@ -1,7 +1,7 @@
 import React from "react";
 import { afterEach, expect, test } from "bun:test";
 import { render, cleanup } from "ink-testing-library";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { freshDb } from "./helpers.ts";
 import { openDb } from "../src/schema.ts";
@@ -24,7 +24,7 @@ import {
   listSessions,
 } from "../src/query.ts";
 import { doctor } from "../src/doctor.ts";
-import { costLabel, fit } from "../src/tui/components.tsx";
+import { costLabel, fit } from "../src/tui/text.ts";
 import type { RefreshOutcome } from "../src/limits.ts";
 import stringWidth from "string-width";
 
@@ -625,4 +625,48 @@ test("disabled refresh never opens a writable connection", async () => {
     if (previous === undefined) delete process.env.CUSAGE_REFRESH;
     else process.env.CUSAGE_REFRESH = previous;
   }
+});
+
+test("string-width is one patched copy shared with Ink, so its per-cluster cache covers every frame", async () => {
+  const pkg = await Bun.file("package.json").json();
+  const installed = (await Bun.file("node_modules/string-width/package.json").json()).version;
+  // patchedDependencies is keyed by exact version: a bump silently drops the patch.
+  expect(Object.keys(pkg.patchedDependencies)).toEqual([`string-width@${installed}`]);
+  expect(pkg.dependencies["string-width"]).toBe(installed);
+  const root = Bun.resolveSync("string-width", process.cwd());
+  for (const dependent of ["ink", "cli-truncate", "widest-line", "wrap-ansi"])
+    expect(Bun.resolveSync("string-width", `${process.cwd()}/node_modules/${dependent}`)).toBe(root);
+  expect(await Bun.file(root).text()).toContain("clusterWidthCache");
+});
+
+test("a WAL archive without -wal/-shm files still opens read-only and refuses writes", () => {
+  const dir = mkdtempSync(`${tmpdir()}/cusage-tui-`);
+  closers.push(() => rmSync(dir, { recursive: true, force: true }));
+  // A copied or restored archive: checkpointed WAL-mode main file, no sidecars.
+  const source = openDb(`${dir}/source.db`);
+  source.run("PRAGMA wal_checkpoint(TRUNCATE)");
+  const file = `${dir}/archive.db`;
+  copyFileSync(`${dir}/source.db`, file);
+  source.close();
+  expect(existsSync(`${file}-wal`)).toBe(false);
+  const reader = openArchive(file);
+  expect(dataVersion(reader)).toBeGreaterThan(0);
+  expect(() => reader.run("INSERT INTO meta VALUES('x','y')")).toThrow();
+  reader.close();
+});
+
+test("keys delivered in one chunk compose, and Detail scrolls back from End in one step", async () => {
+  const { db, deps } = dependencies();
+  const target = sessionPage(db).rows[3]!;
+  const app = mount(deps, 80, 24);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("2");
+  await app.key("jjj");
+  await app.key("\r");
+  expect(app.frame()).toContain(`session_id: ${target.session_id}`);
+  await app.key("\u001b[F");
+  const end = app.frame().match(/↑↓ (\d+)–/)?.[1];
+  expect(end).toBeTruthy();
+  await app.key("k");
+  expect(app.frame().match(/↑↓ (\d+)–/)?.[1]).toBe(String(Number(end) - 1));
 });
