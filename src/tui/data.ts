@@ -1,20 +1,49 @@
 /** Archive lifecycle and bounded page cache. No rendering and no SQL aggregation. */
 import { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
 import { SCHEMA_VERSION } from "../schema.ts";
 import * as query from "../query.ts";
 import { doctor } from "../doctor.ts";
 import { refreshFromApi } from "../limits.ts";
 
+/** Open and read user_version; the first read is where an unusable file fails. */
+function probe(file: string, mode: "readonly" | "readwrite" | "query-only") {
+  const db = new Database(
+    file,
+    mode === "readonly" ? { readonly: true } : { readwrite: true },
+  );
+  try {
+    if (mode === "query-only") db.run("PRAGMA query_only = ON");
+    const { user_version } = db.query("PRAGMA user_version").get() as {
+      user_version: number;
+    };
+    return { db, version: user_version };
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+}
+
+/**
+ * A read-only connection cannot create the -wal/-shm files a WAL archive needs,
+ * so a fresh copy or restored backup fails on first read. Fall back to a
+ * read-write handle that still never creates the file and refuses every write.
+ */
+function connect(file: string, writable: boolean) {
+  if (writable) return probe(file, "readwrite");
+  try {
+    return probe(file, "readonly");
+  } catch (error) {
+    if (!existsSync(file)) throw error;
+    return probe(file, "query-only");
+  }
+}
+
 export function openArchive(file: string, writable = false) {
   let db: Database | undefined;
   try {
-    db = new Database(
-      file,
-      writable ? { readwrite: true } : { readonly: true },
-    );
-    const version = (
-      db.query("PRAGMA user_version").get() as { user_version: number }
-    ).user_version;
+    let version: number;
+    ({ db, version } = connect(file, writable));
     if (version !== SCHEMA_VERSION)
       throw new Error(`schema ${version}, expected ${SCHEMA_VERSION}`);
     db.run("PRAGMA busy_timeout = 1000");
@@ -72,6 +101,7 @@ export function readOverview(db: Database, now: number) {
   })();
 }
 export type OverviewData = ReturnType<typeof readOverview>;
+export type Diagnostics = Awaited<ReturnType<typeof doctor>>;
 export interface TuiDependencies {
   now: () => number;
   overview: () => OverviewData;
@@ -120,6 +150,8 @@ export function archiveDependencies(
   };
 }
 
+const PAGE = 100;
+
 /** Pages are fetched on demand; identity lookup after reload doesn't price skipped pages. */
 export class SessionBrowser {
   private pages = new Map<number, query.SessionRow[]>();
@@ -130,16 +162,18 @@ export class SessionBrowser {
     public options: query.SessionPageOptions = {},
   ) {}
   page(index: number) {
-    const offset = Math.floor(index / 100) * 100;
-    if (!this.pages.has(offset)) {
-      const result = this.deps.page({ ...this.options, offset, pageSize: 100 });
-      this.pages.set(offset, result.rows);
+    const offset = Math.floor(index / PAGE) * PAGE;
+    let rows = this.pages.get(offset);
+    if (!rows) {
+      const result = this.deps.page({ ...this.options, offset, pageSize: PAGE });
+      rows = result.rows;
+      this.pages.set(offset, rows);
       this.total = result.total;
     }
-    return this.pages.get(offset)!;
+    return rows;
   }
   row(index: number) {
-    return this.page(index)[index % 100];
+    return this.page(index)[index % PAGE];
   }
   visible(start: number, count: number) {
     this.page(start);
@@ -154,13 +188,23 @@ export class SessionBrowser {
     if (missing.length) Object.assign(this.costs, this.deps.costs(missing));
     return rows;
   }
+  /**
+   * Index of `id`, else `fallback` clamped. A reload rarely moves the selection
+   * far, so the page around the old position is searched first; the rest are
+   * read only if the session moved across pages.
+   */
   locate(id: string | undefined, fallback: number) {
     this.page(0);
+    const last = Math.max(0, this.total - 1);
+    const near = Math.floor(Math.min(Math.max(0, fallback), last) / PAGE) * PAGE;
     if (id)
-      for (let offset = 0; offset < this.total; offset += 100) {
+      for (const offset of [
+        near,
+        ...Array.from({ length: Math.ceil(this.total / PAGE) }, (_, i) => i * PAGE),
+      ]) {
         const i = this.page(offset).findIndex((r) => r.session_id === id);
         if (i >= 0) return offset + i;
       }
-    return Math.max(0, Math.min(fallback, this.total - 1));
+    return Math.max(0, Math.min(fallback, last));
   }
 }

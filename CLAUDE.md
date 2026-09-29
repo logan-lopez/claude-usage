@@ -65,6 +65,12 @@ Two things survive from the old rule and are still load-bearing:
 - **`src/tui.ts` stays separate and `react`/`ink` stay out of the CLI's import
   graph.** That constraint was never about the dependency count; it is about
   startup cost, and it gets *more* important once deps are cheap to add.
+- **`string-width` is pinned to the exact version Ink resolves, and patched.**
+  `patches/string-width@8.2.2.patch` memoizes per-cluster widths; without it
+  the TUI spends ~90% of each keypress in one Unicode regex. Bun keys
+  `patchedDependencies` by exact version, so a bump silently drops the patch.
+  `tests/tui.test.tsx` fails if that happens; re-create the patch on the new
+  version with `bun patch` rather than deleting the test.
 - **No second network host.** See "One endpoint" below. That is a privacy and
   blast-radius rule, unrelated to packaging, and a dependency does not get to
   quietly bring one along.

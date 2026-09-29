@@ -30,5 +30,15 @@ for (const [entry, outfile] of [
   });
   if (!result.success)
     throw new AggregateError(result.logs, `failed to compile ${entry}`);
+  // Bun 1.3 leaves the ad-hoc signature invalid on macOS, and arm64 kills
+  // invalidly signed executables at exec (exit 137). Re-sign ad hoc.
+  if (process.platform === "darwin") {
+    const sign = Bun.spawnSync(["codesign", "--force", "--sign", "-", outfile], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (sign.exitCode)
+      throw new Error(`codesign ${outfile}: ${sign.stderr.toString().trim()}`);
+  }
   console.log(outfile);
 }
