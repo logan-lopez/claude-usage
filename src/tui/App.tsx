@@ -4,7 +4,8 @@ import { Box, useApp, useInput, useWindowSize } from "ink";
 import { Spinner, ThemeProvider, defaultTheme, extendTheme } from "@inkjs/ui";
 import type { LimitReading } from "../query.ts";
 import type { OverviewData, TuiDependencies } from "./data.ts";
-import { Row, palette } from "./components.tsx";
+import { PaletteContext, Row } from "./components.tsx";
+import { palettes, type Palette, type ThemeName } from "./theme.ts";
 import { age, isStale, num } from "./text.ts";
 import { useArchive } from "./useArchive.ts";
 import { Overview, initialOverviewNav, panels } from "./overview.tsx";
@@ -26,28 +27,27 @@ const CHROME_ROWS = 6;
 const MIN_COLUMNS = 80;
 const MIN_ROWS = 24;
 
-const theme = (mono: boolean) =>
+/** `null` is monochrome: no colour overrides, so the terminal's own styling applies. */
+const theme = (palette: Palette | null) =>
   extendTheme(defaultTheme, {
     components: {
       Select: {
         styles: {
-          focusIndicator: () => ({ color: mono ? undefined : palette.accent }),
-          selectedIndicator: () => ({ color: mono ? undefined : palette.ok }),
+          focusIndicator: () => ({ color: palette?.accent }),
+          selectedIndicator: () => ({ color: palette?.ok }),
           label: ({ isFocused, isSelected }: { isFocused: boolean; isSelected: boolean }) => ({
-            color: mono
-              ? undefined
-              : isFocused
-                ? palette.accent
-                : isSelected
-                  ? palette.ok
-                  : palette.text,
+            color: isFocused
+              ? palette?.accent
+              : isSelected
+                ? palette?.ok
+                : palette?.text,
             bold: isFocused,
           }),
         },
       },
     },
   });
-const themes = { color: theme(false), mono: theme(true) };
+const themes = { dark: theme(palettes.dark), light: theme(palettes.light), mono: theme(null) };
 
 const HINTS: Record<Screen, string> = {
   overview:
@@ -61,11 +61,16 @@ const HINTS: Record<Screen, string> = {
 export function App({
   deps,
   mono = false,
+  theme: themeName = "dark",
+  themeNote,
   dimensions,
   onQuit,
 }: {
   deps: TuiDependencies;
   mono?: boolean;
+  theme?: ThemeName;
+  /** Which theme was chosen and why; shown in help so a wrong detection is diagnosable. */
+  themeNote?: string;
   dimensions?: { columns: number; rows: number };
   onQuit?: () => void;
 }) {
@@ -145,6 +150,7 @@ export function App({
         width={width}
         height={height}
         mono={mono}
+        themeNote={themeNote}
       />
     );
   else if (overlay)
@@ -207,40 +213,42 @@ export function App({
     );
 
   return (
-    <Box width={width} height={rows} flexDirection="column" overflow="hidden">
-      <Header data={data} now={now} width={width} mono={mono} />
-      <Row
-        text={`${screen === "overview" ? "▸" : " "} 1 Overview    ${screen === "sessions" ? "▸" : " "} 2 Sessions${screen === "detail" ? "    ▸ Session Detail" : ""}`}
-        width={width}
-        mono={mono}
-        tone="accent"
-      />
-      <Box height={height} flexShrink={0} flexDirection="column" overflow="hidden">
-        <KeyTarget.Provider value={keys}>
-          <ThemeProvider theme={mono ? themes.mono : themes.color}>{content}</ThemeProvider>
-        </KeyTarget.Provider>
-      </Box>
-      {archive.fetching ? (
-        <Spinner label="Fetching limits; archived readings retained…" />
-      ) : (
+    <PaletteContext.Provider value={palettes[themeName]}>
+      <Box width={width} height={rows} flexDirection="column" overflow="hidden">
+        <Header data={data} now={now} width={width} mono={mono} />
         <Row
-          text={
-            archive.error ||
-            archive.notice ||
-            "Archive browser · ~ estimate · + partial · ? explains provenance"
-          }
+          text={`${screen === "overview" ? "▸" : " "} 1 Overview    ${screen === "sessions" ? "▸" : " "} 2 Sessions${screen === "detail" ? "    ▸ Session Detail" : ""}`}
           width={width}
           mono={mono}
-          tone={archive.error ? "warning" : "muted"}
+          tone="accent"
         />
-      )}
-      <Row
-        text={overlay ? "Enter apply · Esc close/cancel · Ctrl+C quit" : HINTS[screen]}
-        width={width}
-        mono={mono}
-        tone="muted"
-      />
-    </Box>
+        <Box height={height} flexShrink={0} flexDirection="column" overflow="hidden">
+          <KeyTarget.Provider value={keys}>
+            <ThemeProvider theme={mono ? themes.mono : themes[themeName]}>{content}</ThemeProvider>
+          </KeyTarget.Provider>
+        </Box>
+        {archive.fetching ? (
+          <Spinner label="Fetching limits; archived readings retained…" />
+        ) : (
+          <Row
+            text={
+              archive.error ||
+              archive.notice ||
+              "Archive browser · ~ estimate · + partial · ? explains provenance"
+            }
+            width={width}
+            mono={mono}
+            tone={archive.error ? "warning" : "muted"}
+          />
+        )}
+        <Row
+          text={overlay ? "Enter apply · Esc close/cancel · Ctrl+C quit" : HINTS[screen]}
+          width={width}
+          mono={mono}
+          tone="muted"
+        />
+      </Box>
+    </PaletteContext.Provider>
   );
 }
 

@@ -1,17 +1,13 @@
 /** Presentational primitives. Plain props in, Ink elements out. */
-import React, { memo } from "react";
+import React, { createContext, memo, useContext } from "react";
 import { Box, Text } from "ink";
 import type { CostRow, SessionRow } from "../query.ts";
 import { age, costLabel, fit, num, wrap } from "./text.ts";
+import { palettes, type Palette, type Tone } from "./theme.ts";
 
-export const palette = {
-  text: "#edede9",
-  muted: "#99988f",
-  accent: "#d97757",
-  warning: "#cfae6e",
-  ok: "#94b87a",
-};
-export type Tone = keyof typeof palette;
+export type { Tone };
+/** Set once by `App`; the default keeps components renderable on their own. */
+export const PaletteContext = createContext<Palette>(palettes.dark);
 export type Line = { text: string; tone?: Tone };
 export const line = (text: string, tone?: Tone): Line => ({ text, tone });
 
@@ -28,6 +24,7 @@ export const Row = memo(function Row({
   mono?: boolean;
   selected?: boolean;
 }) {
+  const palette = useContext(PaletteContext);
   return (
     <Text
       color={mono ? undefined : palette[selected ? "accent" : tone]}
@@ -124,6 +121,7 @@ export function BarChart({
   height: number;
   mono: boolean;
 }) {
+  const palette = useContext(PaletteContext);
   if (!values.length) return null;
   const peak = Math.max(1, ...values);
   const step = Math.max(1, Math.floor(width / values.length));

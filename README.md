@@ -65,7 +65,15 @@ bun src/tui.ts --db ~/.local/share/claude-usage/usage.db
 ./dist/cusage-tui           # after make build; no installation required
 ./dist/cusage-tui --help
 NO_COLOR=1 ./dist/cusage-tui # or --no-color
+./dist/cusage-tui --theme light   # or CUSAGE_THEME=light|dark|auto
 ```
+
+Colours follow the terminal: at startup the explorer asks for its background
+colour (OSC 11) and picks a light or dark palette, with body text left in the
+terminal's own foreground. `--theme` or `CUSAGE_THEME` overrides that, and dark
+is assumed if the terminal never answers (some multiplexers swallow the query).
+`?` shows which theme was chosen and why. `tests/theme.test.ts` holds every
+palette colour to WCAG AA (4.5:1) on representative backgrounds.
 
 The explorer has **1 Overview**, **2 Sessions**, and Session Detail. It requires
 an interactive terminal of at least **80×24**. At **110×36** and above, Overview

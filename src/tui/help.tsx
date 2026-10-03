@@ -26,16 +26,28 @@ export function Help({
   width,
   height,
   mono,
+  themeNote,
 }: {
   title: string;
   width: number;
   height: number;
   mono: boolean;
+  themeNote?: string;
 }) {
   const [offset, setOffset] = useState(0);
   const rows = useMemo(
-    () => wrapLines([`${title} help`, ...HELP].map((t) => line(t)), width),
-    [title, width],
+    () =>
+      wrapLines(
+        [
+          `${title} help`,
+          ...HELP,
+          ...(themeNote
+            ? [`Theme: ${themeNote}. Override with CUSAGE_THEME=light|dark|auto or --theme.`]
+            : []),
+        ].map((t) => line(t)),
+        width,
+      ),
+    [title, width, themeNote],
   );
   const max = scrollMax(rows, height);
   useKeys((input, key) => {
