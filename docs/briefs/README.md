@@ -14,16 +14,20 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
   picked from the terminal background, and fallback-priced cost-state totals no longer counted as
   measured.
 - The installed binaries in `~/.local/bin` are current at `177065c` (`cusage doctor`: build ok).
-- Nothing is open. The deferred TUI work in `FUTURE.md` needs a brief.
-- Project knowledge still lives in `knowledge/` (OKF) and `CLAUDE.md`; moving it to
-  `docs/architecture/` is the MIGRATE.md pass.
+- Brief 04 is done, awaiting review and a commit. Project knowledge now lives in
+  `docs/architecture/`, `docs/guide/`, a short root README and `AGENTS.md`, and OKF is gone.
+- Waiting on Logan: whether to regenerate the pricing calibration fixture, which predates
+  `MEASURED_COST` (brief 04's report).
+- Next: the deferred TUI work in `FUTURE.md` needs a brief.
 
 ## Open
 
 In the order they should be done. A status tag follows the link when it isn't "not started". Briefs
 that belong to a plan go under its heading.
 
-None.
+4. [`04-move-knowledge-onto-layout.md`](04-move-knowledge-onto-layout.md) (done, awaiting review):
+   architecture pages, the guide, a short root README and `AGENTS.md` replace the OKF bundle and
+   the long `CLAUDE.md`.
 
 ## Done
 
