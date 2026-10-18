@@ -14,6 +14,7 @@ import {
 import { costLabel, num } from "./text.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
 import { visibleRows } from "./layout.ts";
+import type { ScreenModel } from "./screen.ts";
 import type { Report } from "./useArchive.ts";
 
 export const sections = [
@@ -36,7 +37,35 @@ type DetailState = {
   offsets: Record<string, number>;
 };
 
-export function useDetail(deps: TuiDependencies, report: Report) {
+/**
+ * Detail's model, pushed rather than tabbed. `open` loads a session and says whether Detail can
+ * show it; the shell then pushes the screen, and `back` returns to where it came from.
+ */
+export function useDetailScreen({
+  deps,
+  report,
+  back,
+}: {
+  deps: TuiDependencies;
+  report: Report;
+  back: () => void;
+}): ScreenModel & { open: (id: string | undefined) => boolean } {
+  const viewer = useDetail(deps, report);
+  return {
+    title: "Session Detail",
+    hints:
+      "Tab section · ←→ attribution · ↑↓ scroll · Esc back · r reread · R fetch · ? help · q quit",
+    help: [],
+    reload: viewer.reload,
+    overlay: false,
+    open: viewer.open,
+    render: (frame) => (
+      <DetailScreen detail={viewer} width={frame.width} height={frame.height} onBack={back} />
+    ),
+  };
+}
+
+function useDetail(deps: TuiDependencies, report: Report) {
   const [state, setState] = useState<DetailState | null>(null);
   return {
     state,
@@ -79,9 +108,9 @@ export function useDetail(deps: TuiDependencies, report: Report) {
     },
   };
 }
-export type Detail = ReturnType<typeof useDetail>;
+type Detail = ReturnType<typeof useDetail>;
 
-export function DetailScreen({
+function DetailScreen({
   detail,
   width,
   height,

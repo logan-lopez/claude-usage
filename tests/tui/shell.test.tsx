@@ -3,6 +3,7 @@ import { openDb } from "../../src/schema.ts";
 import { readOverview } from "../../src/tui/data.ts";
 import { sessionPage } from "../../src/query.ts";
 import type { RefreshOutcome } from "../../src/limits.ts";
+import { TABS } from "../../src/tui/screen.ts";
 import {
   NOW,
   closers,
@@ -167,4 +168,40 @@ test("keys delivered in one chunk compose, and Detail scrolls back from End in o
   expect(end).toBeTruthy();
   await app.key("k");
   expect(app.frame().match(/↑↓ (\d+)–/)?.[1]).toBe(String(Number(end) - 1));
+});
+
+test("the tab bar and digit keys come from TABS", async () => {
+  const { deps } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  const tabRow = () => app.frame().split("\n")[2]!;
+  for (const t of TABS) expect(tabRow()).toContain(` ${t.key} `);
+  for (const t of [...TABS].reverse()) {
+    await app.key(t.key);
+    expect(tabRow()).toContain(`▸ ${t.key} `);
+    expect(tabRow().split("▸").length).toBe(2);
+  }
+  // A digit with no tab does nothing.
+  const before = app.frame();
+  await app.key(String(TABS.length + 1));
+  expect(app.frame()).toBe(before);
+});
+
+test("every model's reload runs after a data_version change, shown or not", async () => {
+  const { deps, change } = dependencies();
+  const calls = { page: 0, detail: 0 };
+  const page = deps.page;
+  const detail = deps.detail;
+  deps.page = (opts) => (calls.page++, page(opts));
+  deps.detail = (id) => (calls.detail++, detail(id));
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  // Open Detail from Overview, then go back: Sessions and Detail are both off screen.
+  await app.key("\r");
+  expect(app.frame()).toContain("Session Detail");
+  await app.key("\u001b");
+  expect(app.frame()).toContain("Recent sessions");
+  const before = { ...calls };
+  change();
+  await until(() => calls.page > before.page && calls.detail > before.detail);
 });

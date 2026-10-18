@@ -1,5 +1,5 @@
 /** Overview: five panels, all visible at 110×36+, one at a time down to 80×24. */
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Box } from "ink";
 import type { Diagnostics, OverviewData } from "./data.ts";
 import {
@@ -16,8 +16,9 @@ import {
 import { age, isStale, num, spark } from "./text.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
 import { contentHeight, tableBodyRows, visibleRows } from "./layout.ts";
+import { tabKeys, type ScreenModel } from "./screen.ts";
 
-export const panels = [
+const panels = [
   "Server limits",
   "Archive",
   "Meters",
@@ -30,14 +31,14 @@ const METERS = 2;
 const DAILY = 3;
 const RECENT = 4;
 
-export type OverviewNav = {
+type OverviewNav = {
   panel: number;
   /** Scroll offset per panel. */
   offsets: number[];
   /** Selected recent session by ID, so a reread cannot move the selection. */
   recentId: string | undefined;
 };
-export const initialOverviewNav: OverviewNav = {
+const initialOverviewNav: OverviewNav = {
   panel: RECENT,
   offsets: panels.map(() => 0),
   recentId: undefined,
@@ -157,7 +158,35 @@ function meterLines(data: OverviewData, compact: boolean): Line[] {
   ];
 }
 
-export function Overview({
+/** Overview's model. Its navigation lives here so Detail can return to the same selection. */
+export function useOverviewScreen({
+  open,
+}: {
+  open: (id: string | undefined) => void;
+}): ScreenModel {
+  const [nav, setNav] = useState(initialOverviewNav);
+  return {
+    title: "Overview",
+    context: panels[nav.panel],
+    hints: `${tabKeys} tabs · Tab panel · ↑↓ scroll/select · Enter open · r reread · R fetch · ? help · q quit`,
+    help: [],
+    overlay: false,
+    render: (frame) => (
+      <Overview
+        data={frame.data}
+        diagnostics={frame.diagnostics}
+        now={frame.now}
+        width={frame.width}
+        height={frame.height}
+        nav={nav}
+        setNav={setNav}
+        onOpen={open}
+      />
+    ),
+  };
+}
+
+function Overview({
   data,
   diagnostics,
   now,

@@ -1,4 +1,4 @@
-/** Shell: header, tabs, status and key hints around the active screen or overlay. */
+/** Shell: header, tabs, status and key hints around the active screen or help. */
 import React, { useRef, useState } from "react";
 import { Box, useApp, useInput, useWindowSize } from "ink";
 import { Spinner, ThemeProvider, defaultTheme, extendTheme } from "@inkjs/ui";
@@ -8,21 +8,13 @@ import { PaletteContext, Row } from "./components.tsx";
 import { MONO, palettes, type Palette, type ThemeName } from "./theme.ts";
 import { age, isStale, num } from "./text.ts";
 import { useArchive } from "./useArchive.ts";
-import { Overview, initialOverviewNav, panels } from "./overview.tsx";
-import {
-  SessionOverlayView,
-  SessionsScreen,
-  sessionRows,
-  useSessions,
-  type SessionOverlay,
-} from "./sessions.tsx";
-import { DetailScreen, useDetail } from "./detail.tsx";
+import { useOverviewScreen } from "./overview.tsx";
+import { useSessionsScreen } from "./sessions.tsx";
+import { useDetailScreen } from "./detail.tsx";
 import { Help } from "./help.tsx";
 import { KeyTarget, type KeyHandler } from "./keys.ts";
 import { MIN_COLUMNS, MIN_ROWS, contentHeight } from "./layout.ts";
-
-type Screen = "overview" | "sessions" | "detail";
-type Overlay = "help" | SessionOverlay | null;
+import { TABS, type ScreenId, type ScreenModel, type TabId } from "./screen.ts";
 
 /** `MONO` has no colour overrides, so the terminal's own styling applies. */
 const theme = (palette: Palette) =>
@@ -46,14 +38,7 @@ const theme = (palette: Palette) =>
   });
 const themes = { dark: theme(palettes.dark), light: theme(palettes.light), mono: theme(MONO) };
 
-const HINTS: Record<Screen, string> = {
-  overview:
-    "1/2 tabs · Tab panel · ↑↓ scroll/select · Enter open · r reread · R fetch · ? help · q quit",
-  sessions:
-    "↑↓ select · Enter open · / search · f filters · s sort · r reread · R fetch · ? help · q quit",
-  detail:
-    "Tab section · ←→ attribution · ↑↓ scroll · Esc back · r reread · R fetch · ? help · q quit",
-};
+const isTab = (id: ScreenId): id is TabId => TABS.some((t) => t.id === id);
 
 export function App({
   deps,
@@ -77,28 +62,33 @@ export function App({
   const height = contentHeight(rows);
   const palette = mono ? MONO : palettes[themeName];
   const { exit } = useApp();
-  const [screen, setScreen] = useState<Screen>("overview");
-  const [origin, setOrigin] = useState<"overview" | "sessions">("overview");
-  const [overlay, setOverlay] = useState<Overlay>(null);
-  const [overviewNav, setOverviewNav] = useState(initialOverviewNav);
-  const archive = useArchive(deps, () => {
-    sessions.reload();
-    if (screen === "detail") detail.reload();
-  });
-  const sessions = useSessions(deps, sessionRows(height), archive.report);
-  const detail = useDetail(deps, archive.report);
-  const { data, now } = archive;
+  const [screen, setScreen] = useState<ScreenId>(TABS[0].id);
+  const [origin, setOrigin] = useState<TabId>(TABS[0].id);
+  const [help, setHelp] = useState(false);
   const keys = useRef<KeyHandler | null>(null);
+  // The models of the last render; an archive change reloads every one of them.
+  const models = useRef<ScreenModel[]>([]);
+  const archive = useArchive(deps, () => {
+    for (const model of models.current) model.reload?.();
+  });
+  const { data, now, report } = archive;
+
+  const detail = useDetailScreen({ deps, report, back: () => setScreen(origin) });
+  const open = (id: string | undefined) => {
+    if (!detail.open(id)) return;
+    if (isTab(screen)) setOrigin(screen);
+    setScreen("detail");
+  };
+  const overview = useOverviewScreen({ open });
+  const sessions = useSessionsScreen({ deps, report, height, open });
+  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, detail };
+  models.current = Object.values(screens);
+  const current = screens[screen];
 
   const quit = () => {
     archive.close();
     onQuit?.();
     exit();
-  };
-  const open = (id: string | undefined) => {
-    if (!detail.open(id)) return;
-    setOrigin(screen === "sessions" ? "sessions" : "overview");
-    setScreen("detail");
   };
 
   // Global keys first; the rest go to the active screen or help (see useKeys).
@@ -109,16 +99,20 @@ export function App({
       if (input === "q") quit();
       return;
     }
-    if (overlay) {
-      if (key.escape) return setOverlay(null);
+    if (help) {
+      if (key.escape) return setHelp(false);
+      return keys.current?.(input, key);
+    }
+    if (current.overlay) {
+      if (key.escape) return current.closeOverlay?.();
       return keys.current?.(input, key);
     }
     if (input === "q") return quit();
-    if (input === "?") return setOverlay("help");
+    if (input === "?") return setHelp(true);
     if (input === "r") return archive.reread();
     if (input === "R") return archive.refresh();
-    if (input === "1") return setScreen("overview");
-    if (input === "2") return setScreen("sessions");
+    const tab = TABS.find((t) => t.key === input);
+    if (tab) return setScreen(tab.id);
     keys.current?.(input, key);
   });
 
@@ -134,85 +128,30 @@ export function App({
       </PaletteContext.Provider>
     );
 
-  let content: React.ReactNode;
-  if (overlay === "help")
-    content = (
-      <Help
-        title={
-          screen === "detail"
-            ? "Session Detail"
-            : screen === "sessions"
-              ? "Sessions"
-              : `Overview · ${panels[overviewNav.panel]}`
-        }
-        width={width}
-        height={height}
-        themeNote={themeNote}
-      />
-    );
-  else if (overlay)
-    content = (
-      <SessionOverlayView
-        overlay={overlay}
-        filters={sessions.filters}
-        width={width}
-        onOverlay={setOverlay}
-        onApply={(next) => {
-          sessions.apply(next);
-          setOverlay(null);
-        }}
-      />
-    );
-  else if (!data)
-    content = archive.error ? (
+  const content = help ? (
+    <Help
+      title={`${current.title}${current.context ? ` · ${current.context}` : ""}`}
+      width={width}
+      height={height}
+      themeNote={themeNote}
+    />
+  ) : !data ? (
+    archive.error ? (
       <Row text={archive.error} width={width} tone="warning" />
     ) : (
       <Spinner label="Reading archive…" />
-    );
-  else if (screen === "overview")
-    content = (
-      <Overview
-        data={data}
-        diagnostics={archive.diagnostics}
-        now={now}
-        width={width}
-        height={height}
-        nav={overviewNav}
-        setNav={setOverviewNav}
-        onOpen={open}
-      />
-    );
-  else if (screen === "sessions")
-    content = (
-      <SessionsScreen
-        sessions={sessions}
-        archiveEmpty={!data.inventory.requests}
-        width={width}
-        height={height}
-        now={now}
-        onOpen={open}
-        onOverlay={setOverlay}
-      />
-    );
-  else
-    content = (
-      <DetailScreen
-        detail={detail}
-        width={width}
-        height={height}
-        onBack={() => setScreen(origin)}
-      />
-    );
+    )
+  ) : (
+    current.render({ width, height, now, data, diagnostics: archive.diagnostics })
+  );
+  const tabs = TABS.map((t) => `${t.id === screen ? "▸" : " "} ${t.key} ${screens[t.id].title}`);
+  if (!isTab(screen)) tabs.push(`▸ ${current.title}`);
 
   return (
     <PaletteContext.Provider value={palette}>
       <Box width={width} height={rows} flexDirection="column" overflow="hidden">
         <Header data={data} now={now} width={width} />
-        <Row
-          text={`${screen === "overview" ? "▸" : " "} 1 Overview    ${screen === "sessions" ? "▸" : " "} 2 Sessions${screen === "detail" ? "    ▸ Session Detail" : ""}`}
-          width={width}
-          tone="accent"
-        />
+        <Row text={tabs.join("    ")} width={width} tone="accent" />
         <Box height={height} flexShrink={0} flexDirection="column" overflow="hidden">
           <KeyTarget.Provider value={keys}>
             <ThemeProvider theme={mono ? themes.mono : themes[themeName]}>{content}</ThemeProvider>
@@ -232,7 +171,11 @@ export function App({
           />
         )}
         <Row
-          text={overlay ? "Enter apply · Esc close/cancel · Ctrl+C quit" : HINTS[screen]}
+          text={
+            help || current.overlay
+              ? "Enter apply · Esc close/cancel · Ctrl+C quit"
+              : current.hints
+          }
           width={width}
           tone="muted"
         />

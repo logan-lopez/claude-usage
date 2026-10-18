@@ -10,10 +10,12 @@ with Overview, Sessions and Session Detail screens.
 | File | Role |
 | --- | --- |
 | `src/tui.ts` | The entry: argv, theme detection, render |
-| `src/tui/App.tsx` | The shell only: header, tabs, status, key hints and global keys |
+| `src/tui/App.tsx` | The shell only: header, tabs, status, key hints, help and global keys, all derived from the screen models |
+| `src/tui/screen.ts` | The screen contract: `ScreenModel`, `Frame` and `TABS` |
 | `src/tui/useArchive.ts` | The archive lifecycle |
 | `src/tui/data.ts` | Opening the archive, the query-backed dependencies the screens read through, and the session page cache |
-| `src/tui/overview.tsx`, `sessions.tsx`, `detail.tsx`, `help.tsx` | Each renders its screen and owns its keys |
+| `src/tui/overview.tsx`, `sessions.tsx`, `detail.tsx` | Each exports a hook returning its screen's `ScreenModel`, and renders that screen and owns its keys |
+| `src/tui/help.tsx` | The help overlay the shell draws over any screen |
 | `src/tui/keys.ts` | Key routing (`useKeys`) and `movement()` |
 | `src/tui/layout.ts` | The row budget: minimum size, chrome rows, and how a viewport's height becomes a page |
 | `src/tui/text.ts` | Pure width, wrap and label helpers |
@@ -37,14 +39,31 @@ reread (`r`), diagnostics and refresh (`R`). It reports through one error and no
 - Diagnostics run `doctor` in credential-free `archiveOnly` mode after the first render and on
   `r`, not on every poll.
 
-**Browsing state.** State that must survive opening Detail lives in hooks the shell calls:
+**Screens.** Each screen module exports a hook (`useOverviewScreen`, `useSessionsScreen`,
+`useDetailScreen`) that returns a `ScreenModel` (`src/tui/screen.ts`) every render: its title and
+help context, footer hints, help lines, an optional `reload`, whether its own overlay owns the
+keyboard, and a `render(frame)`. `App` calls the three hooks in a fixed order and builds a
+`Record<ScreenId, ScreenModel>`. From it, and from `TABS`, it derives the tab bar, the digit keys,
+the footer hints, the help heading and lines, and the reload loop.
+
+- Detail is pushed, not a tab. `useDetailScreen` returns `open(id)` beside its model; the shell
+  pushes Detail when it succeeds, and Esc returns to the tab it came from.
+- Sessions owns its editors (search, filters, project, model, activity, sort). It renders the
+  editor in place of the table while `overlay` is true; the shell only calls `closeOverlay` on
+  Esc.
+- Help is the shell's own overlay.
+
+**Browsing state.** State that must survive opening Detail lives in the screen hooks, which the
+shell calls every render whichever screen is showing:
 
 - `useSessions` holds 100-row pages, the filters, and the selection, kept by session id. It
   commits one view object, tracked in a ref so repeated keys compose.
 - `useDetail` holds Detail's state.
-- Overview's navigation holds the recent-session selection by id rather than by index.
+- `useOverviewScreen` holds Overview's navigation: the focused panel, each panel's scroll, and
+  the recent-session selection by id rather than by index.
 
-Rereads keep the selection by id where possible.
+After every archive change the shell calls each model's `reload`, shown or not, so a screen can't
+miss one. Rereads keep the selection by id where possible.
 
 **Sessions.** Search, project, model and activity filters choose session identities. Displayed
 amounts stay whole-session totals, and costs are computed only for the session ids on screen,
@@ -84,6 +103,11 @@ light or dark palette.
 
 ## Rules worth keeping
 
+- **Adding a tab is three edits.** A screen module whose hook returns a `ScreenModel`, a row in
+  `TABS` (its id and digit key), and one hook call in `App` added to the record. Everything else
+  (the tab bar, the digit key, hints, help, reload) follows from those. If the screen has its own
+  input or select, it reports it through `overlay` and `closeOverlay` instead of the shell
+  learning about it.
 - **React and Ink stay inside `src/tui.ts` and `src/tui/`.** See the
   [architecture overview](README.md#two-binaries).
 - **Screens get keys through the shell's single `useInput`, via `useKeys`, which registers in a

@@ -13,6 +13,7 @@ import {
 import { Row, SessionTable } from "./components.tsx";
 import { movement, useKeys } from "./keys.ts";
 import { tableBodyRows } from "./layout.ts";
+import type { ScreenModel } from "./screen.ts";
 import type { Report } from "./useArchive.ts";
 
 export type Filters = {
@@ -29,18 +30,13 @@ export const initialFilters: Filters = {
   activity: "All",
   sort: "activity",
 };
-export type SessionOverlay =
-  | "search"
-  | "filters"
-  | "project"
-  | "model"
-  | "activity"
-  | "sort";
+/** The input or select that replaces the table while it owns the keyboard. */
+type Editor = "search" | "filters" | "project" | "model" | "activity" | "sort";
 
 /** The search, filter and count rows above the table. */
 const FILTER_ROWS = 3;
 /** Table body rows on a Sessions screen of `height`: what one page fetches and PageDown moves. */
-export const sessionRows = (height: number) => tableBodyRows(height - FILTER_ROWS);
+const sessionRows = (height: number) => tableBodyRows(height - FILTER_ROWS);
 
 /** Everything the table needs, committed together so one move is one render. */
 type View = {
@@ -53,7 +49,55 @@ type View = {
 const emptyView: View = { rows: [], costs: {}, total: 0, selection: 0, scroll: 0 };
 const selectedId = (v: View) => v.rows[v.selection - v.scroll]?.session_id;
 
-export function useSessions(
+/** Sessions' model: paged browsing state, plus the editor overlays it owns. */
+export function useSessionsScreen({
+  deps,
+  report,
+  height,
+  open,
+}: {
+  deps: TuiDependencies;
+  report: Report;
+  height: number;
+  open: (id: string | undefined) => void;
+}): ScreenModel {
+  const list = useSessions(deps, sessionRows(height), report);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  return {
+    title: "Sessions",
+    hints:
+      "↑↓ select · Enter open · / search · f filters · s sort · r reread · R fetch · ? help · q quit",
+    help: [],
+    reload: list.reload,
+    overlay: editor !== null,
+    closeOverlay: () => setEditor(null),
+    render: (frame) =>
+      editor ? (
+        <FilterEditor
+          editor={editor}
+          filters={list.filters}
+          width={frame.width}
+          onEditor={setEditor}
+          onApply={(next) => {
+            list.apply(next);
+            setEditor(null);
+          }}
+        />
+      ) : (
+        <SessionsScreen
+          sessions={list}
+          archiveEmpty={!frame.data.inventory.requests}
+          width={frame.width}
+          height={frame.height}
+          now={frame.now}
+          onOpen={open}
+          onEditor={setEditor}
+        />
+      ),
+  };
+}
+
+function useSessions(
   deps: TuiDependencies,
   pageHeight: number,
   report: Report,
@@ -150,16 +194,16 @@ export function useSessions(
     },
   };
 }
-export type Sessions = ReturnType<typeof useSessions>;
+type Sessions = ReturnType<typeof useSessions>;
 
-export function SessionsScreen({
+function SessionsScreen({
   sessions,
   archiveEmpty,
   width,
   height,
   now,
   onOpen,
-  onOverlay,
+  onEditor,
 }: {
   sessions: Sessions;
   archiveEmpty: boolean;
@@ -167,13 +211,13 @@ export function SessionsScreen({
   height: number;
   now: number;
   onOpen: (id: string | undefined) => void;
-  onOverlay: (overlay: SessionOverlay) => void;
+  onEditor: (editor: Editor) => void;
 }) {
   const { filters, view } = sessions;
   useKeys((input, key) => {
-    if (input === "/") return onOverlay("search");
-    if (input === "f") return onOverlay("filters");
-    if (input === "s") return onOverlay("sort");
+    if (input === "/") return onEditor("search");
+    if (input === "f") return onEditor("filters");
+    if (input === "s") return onEditor("sort");
     if (key.return) return onOpen(sessions.selected());
     const to = movement(input, key, sessionRows(height));
     if (to) sessions.move(to);
@@ -220,19 +264,19 @@ export function SessionsScreen({
 const options = (values: readonly string[]) =>
   values.map((value) => ({ label: value, value }));
 
-/** Overlays own the keyboard; Esc (handled by the shell) cancels without applying. */
-export function SessionOverlayView({
-  overlay,
+/** Editors own the keyboard; Esc (handled by the shell) cancels without applying. */
+function FilterEditor({
+  editor: overlay,
   filters,
   width,
   onApply,
-  onOverlay,
+  onEditor,
 }: {
-  overlay: SessionOverlay;
+  editor: Editor;
   filters: Filters;
   width: number;
   onApply: (next: Filters) => void;
-  onOverlay: (overlay: SessionOverlay) => void;
+  onEditor: (editor: Editor) => void;
 }) {
   if (overlay === "search" || overlay === "project" || overlay === "model")
     return (
@@ -260,7 +304,7 @@ export function SessionOverlayView({
           onChange={(v) =>
             v === "Clear all"
               ? onApply({ ...initialFilters, sort: filters.sort })
-              : onOverlay(v.toLowerCase() as "project" | "model" | "activity")
+              : onEditor(v.toLowerCase() as "project" | "model" | "activity")
           }
         />
       </Box>
