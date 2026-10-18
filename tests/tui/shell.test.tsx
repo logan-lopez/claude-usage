@@ -1,0 +1,170 @@
+import { afterEach, expect, test } from "bun:test";
+import { openDb } from "../../src/schema.ts";
+import { readOverview } from "../../src/tui/data.ts";
+import { sessionPage } from "../../src/query.ts";
+import type { RefreshOutcome } from "../../src/limits.ts";
+import {
+  NOW,
+  closers,
+  dependencies,
+  mount,
+  outcome,
+  settle,
+  teardown,
+  until,
+} from "./helpers.tsx";
+
+afterEach(teardown);
+
+test("polling, manual diagnostics, guarded and failed refresh; repeated keys do not queue; quit pending", async () => {
+  const { deps, counts, change } = dependencies();
+  let release!: (r: RefreshOutcome) => void;
+  deps.refresh = () => {
+    counts.refresh++;
+    return new Promise((r) => (release = r));
+  };
+  let quits = 0;
+  const app = mount(deps, 120, 40, () => quits++);
+  await until(() => counts.diagnostics === 1);
+  await settle();
+  const before = counts.overview;
+  change();
+  await until(() => counts.overview > before);
+  expect(counts.diagnostics).toBe(1);
+  await app.key("r");
+  expect(counts.diagnostics).toBe(2);
+  expect(counts.refresh).toBe(0);
+  await app.key("R");
+  await app.key("R");
+  expect(counts.refresh).toBe(1);
+  expect(app.frame()).toContain("Fetching limits");
+  release(outcome);
+  await until(() => app.frame().includes("guarded"));
+  await app.key("R");
+  release({ ...outcome, reason: "failed", error: "offline" });
+  await until(() => app.frame().includes("offline"));
+  expect(app.frame()).toContain("Recent sessions");
+  await app.key("R");
+  await app.key("q");
+  expect(quits).toBe(1);
+  release({ ...outcome, ok: true, reason: "ok" });
+  await settle();
+  expect(counts.refresh).toBe(3);
+});
+
+test("recoverable reads retain the last successful data; ages tick without expensive rereads", async () => {
+  const { deps, counts, tick } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  const before = counts.overview;
+  tick(60000);
+  await new Promise((r) => setTimeout(r, 1100));
+  expect(counts.overview).toBe(before);
+  deps.overview = () => {
+    throw new Error("offline");
+  };
+  await app.key("r");
+  expect(app.frame()).toContain("outdated");
+  expect(app.frame()).toContain("Recent sessions");
+});
+
+test("empty archive, unavailable limits, no-color help, undersize quit and Ctrl+C in inputs", async () => {
+  const { deps } = dependencies();
+  const db = openDb(":memory:");
+  closers.push(() => db.close());
+  deps.overview = () => readOverview(db, NOW);
+  deps.page = (opts) => sessionPage(db, opts);
+  let quits = 0;
+  const app = mount(deps, 80, 24, () => quits++);
+  await until(() => app.frame().includes("Archive is empty"));
+  expect(app.frame()).toContain("Binding limit unavailable");
+  await app.key("2");
+  expect(app.frame()).toContain("0 matching");
+  await app.key("?");
+  expect(app.frame()).toContain("Sessions help");
+  await app.key("q");
+  expect(quits).toBe(0);
+  await app.key("\u001b");
+  await app.key("/");
+  await app.key("\u0003");
+  expect(quits).toBe(1);
+  const small = mount(deps, 60, 18, () => quits++);
+  await settle();
+  await small.key("q");
+  expect(quits).toBe(2);
+});
+
+test("entrypoint help is available without a TTY or database, malformed options exit 2", async () => {
+  for (const [args, code, text] of [
+    [["--help", "--db", "/missing/archive"], 0, "Usage: cusage-tui"],
+    [["--unknown"], 2, "Use cusage-tui --help"],
+    [["--db"], 2, "Use cusage-tui --help"],
+  ] as const) {
+    const child = Bun.spawn([process.execPath, "src/tui.ts", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const out =
+      (await new Response(child.stdout).text()) +
+      (await new Response(child.stderr).text());
+    expect(await child.exited).toBe(code);
+    expect(out).toContain(text);
+  }
+});
+
+test("refresh completion uses current browsing state and cancellation is invoked on quit", async () => {
+  const { db, deps } = dependencies();
+  let release!: (r: RefreshOutcome) => void;
+  let cancelled = 0;
+  deps.refresh = () => new Promise((r) => (release = r));
+  deps.cancelPending = () => cancelled++;
+  const first = sessionPage(db).rows[0]!;
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("R");
+  await app.key("2");
+  await app.key("/");
+  await app.key(first.session_id);
+  await app.key("\r");
+  expect(app.frame()).toContain("1 matching");
+  release({ ...outcome, ok: true, reason: "ok" });
+  await until(() => app.frame().includes("Limits refreshed"));
+  expect(app.frame()).toContain("1 matching");
+  await app.key("\r");
+  expect(app.frame()).toContain(first.session_id);
+  await app.key("q");
+  expect(cancelled).toBeGreaterThan(0);
+});
+
+test("data version is sampled before rereading so a concurrent change is not lost", async () => {
+  const { deps, counts, change } = dependencies();
+  const original = deps.overview;
+  let first = true;
+  deps.overview = () => {
+    const result = original();
+    if (first) {
+      first = false;
+      change();
+    }
+    return result;
+  };
+  const app = mount(deps);
+  await until(() => counts.overview >= 2);
+  expect(app.frame()).toContain("Recent sessions");
+});
+
+test("keys delivered in one chunk compose, and Detail scrolls back from End in one step", async () => {
+  const { db, deps } = dependencies();
+  const target = sessionPage(db).rows[3]!;
+  const app = mount(deps, 80, 24);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("2");
+  await app.key("jjj");
+  await app.key("\r");
+  expect(app.frame()).toContain(`session_id: ${target.session_id}`);
+  await app.key("\u001b[F");
+  const end = app.frame().match(/↑↓ (\d+)–/)?.[1];
+  expect(end).toBeTruthy();
+  await app.key("k");
+  expect(app.frame().match(/↑↓ (\d+)–/)?.[1]).toBe(String(Number(end) - 1));
+});

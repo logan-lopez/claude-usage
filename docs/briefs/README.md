@@ -29,7 +29,7 @@ that belong to a plan go under its heading.
 4. [`04-move-knowledge-onto-layout.md`](04-move-knowledge-onto-layout.md) (done, awaiting review):
    architecture pages, the guide, a short root README and `AGENTS.md` replace the OKF bundle and
    the long `CLAUDE.md`.
-5. [`05-tui-cleanup-pass.md`](05-tui-cleanup-pass.md): the TUI's screen model (`TABS`, a reload
+5. [`05-tui-cleanup-pass.md`](05-tui-cleanup-pass.md) (in progress): the TUI's screen model (`TABS`, a reload
    per screen), one layout rule for page sizes, help per screen, `tests/tui/` split by screen,
    and thirteen visible quirks fixed.
 
@@ -58,7 +58,7 @@ Don't relitigate these. If one turns out to be wrong in practice, stop and say s
 | Request key | `requests` is `WITHOUT ROWID`; `request_id` is `''`, never `NULL` | 228 records have no `requestId`; nullable PK columns would re-insert them every sync. (`CLAUDE.md`) |
 | Ingest writes | One atomic keep-max UPSERT; offsets to the last complete newline, re-read on shrink or inode change, commit per file | Read-then-write degrades to "keep last", and last is the smallest streaming snapshot. (`CLAUDE.md`) |
 | Dependencies and install | Dependencies allowed; install is compiled CLI and TUI binaries in `~/.local/bin` | `bun build --compile` starts in ~39 ms against ~98 ms and needs no `node_modules` under launchd. (`CLAUDE.md`, brief 02 §7) |
-| `string-width` | Pinned to the exact version Ink resolves, and patched | Unpatched, ~90% of each keypress is one Unicode regex; Bun keys patches by exact version. `tests/tui.test.tsx` catches a bump. (`CLAUDE.md`) |
+| `string-width` | Pinned to the exact version Ink resolves, and patched | Unpatched, ~90% of each keypress is one Unicode regex; Bun keys patches by exact version. `tests/tui/string-width.test.ts` catches a bump. (`CLAUDE.md`) |
 | Network | `GET api.anthropic.com/api/oauth/usage` only, from `src/oauth.ts`, behind a 3-minute floor on attempts that config can raise but not lower | "No network ever" kept a 27-hour-stale 53% on screen while the real figure was 74%. (`CLAUDE.md`) |
 | Pricing refresh | `cusage pricing --refresh` cancelled; `tools/refresh-pricing.ts` is run by hand | Keeps one host for shipped code, stated flatly. (brief 02) |
 | Stale numbers | Every limit carries its source and age; meters reconciled per meter by freshness; disagreements reported, never averaged | The first `renderLimits` printed a bold 53% with no age. (`CLAUDE.md`) |

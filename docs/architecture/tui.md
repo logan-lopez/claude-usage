@@ -89,9 +89,9 @@ light or dark palette.
 - **`string-width` is pinned to the exact version Ink resolves, and patched.**
   `patches/string-width@8.2.2.patch` memoizes per-cluster widths.
   - Bun keys `patchedDependencies` by exact version, so a bump silently drops the patch.
-  - `tests/tui.test.tsx` asserts the key, the pinned version, the single resolved copy and the
-    patch marker. Re-create the patch on a new version with `bun patch` rather than deleting the
-    test.
+  - `tests/tui/string-width.test.ts` asserts the key, the pinned version, the single resolved
+    copy and the patch marker. Re-create the patch on a new version with `bun patch` rather than
+    deleting the test.
 - **Don't hard-code body text colour.** That's what made the dark palette unreadable on light
   backgrounds. `tests/theme.test.ts` holds every palette tone to WCAG AA (4.5:1) on
   representative backgrounds, and keeps tones within a theme distinguishable.

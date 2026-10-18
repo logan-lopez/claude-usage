@@ -73,7 +73,7 @@ Each is the kind of thing a reasonable refactor deletes. The page linked has the
   of measured cost goes through `MEASURED_COST` ([Cost](docs/architecture/cost.md)).
 - **`string-width` is pinned to the exact version Ink resolves, and patched.** A bump silently
   drops the patch; re-create it with `bun patch` rather than deleting the test in
-  `tests/tui.test.tsx` ([TUI](docs/architecture/tui.md)).
+  `tests/tui/string-width.test.ts` ([TUI](docs/architecture/tui.md)).
 - **Every numeric assertion runs against `fixtures/`, never live data.** Regenerate the fixture,
   never hand-edit it; scrubbing is an allowlist; `BASELINE.json` comes from a second dedup
   implementation in `tools/make-fixture.ts` — keep the two separate
