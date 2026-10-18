@@ -13,7 +13,7 @@ with Overview, Sessions and Session Detail screens.
 | `src/tui/App.tsx` | The shell only: header, tabs, status, key hints, help and global keys, all derived from the screen models |
 | `src/tui/screen.ts` | The screen contract: `ScreenModel`, `Frame` and `TABS` |
 | `src/tui/useArchive.ts` | The archive lifecycle |
-| `src/tui/data.ts` | Opening the archive, the query-backed dependencies the screens read through, and the session page cache |
+| `src/tui/data.ts` | Opening the archive, the query-backed dependencies the screens read through, and the session page cache, which never evicts and is replaced on every filter change or reload |
 | `src/tui/overview.tsx`, `sessions.tsx`, `detail.tsx` | Each exports a hook returning its screen's `ScreenModel`, and renders that screen and owns its keys |
 | `src/tui/help.tsx` | The help overlay the shell draws over any screen |
 | `src/tui/keys.ts` | Key routing (`useKeys`) and `movement()` |
@@ -33,7 +33,9 @@ migrates one. A missing or incompatible archive gets a message pointing at `cusa
   still refuses every write.
 
 **`useArchive`** owns the first read, `PRAGMA data_version` polling every five seconds, the clock,
-reread (`r`), diagnostics and refresh (`R`). It reports through one error and notice channel.
+reread (`r`), diagnostics and refresh (`R`). It reports through one error and notice channel. A
+notice clears `NOTICE_MS` (ten seconds) after it appears, on the clock's tick; an error clears
+only on a successful read.
 
 - Clock ticks update relative ages without requerying aggregates.
 - Diagnostics run `doctor` in credential-free `archiveOnly` mode after the first render and on
@@ -51,14 +53,16 @@ the footer hints, the help heading and lines, and the reload loop.
 - Sessions owns its editors (search, filters, project, model, activity, sort). It renders the
   editor in place of the table while `overlay` is true; the shell only calls `closeOverlay` on
   Esc.
-- Help is the shell's own overlay.
+- Help is the shell's own overlay: `<title>[ · context] help`, the screen's `help` lines, then the
+  shell's (tabs, `r`, `R`, `?`, `q`, Ctrl+C) and the theme note.
 
 **Browsing state.** State that must survive opening Detail lives in the screen hooks, which the
 shell calls every render whichever screen is showing:
 
 - `useSessions` holds 100-row pages, the filters, and the selection, kept by session id. It
   commits one view object, tracked in a ref so repeated keys compose.
-- `useDetail` holds Detail's state.
+- `useDetail` holds Detail's state, including the session id apart from the session, so one
+  that disappears from the archive is found again if a later reread brings it back.
 - `useOverviewScreen` holds Overview's navigation: the focused panel, each panel's scroll, and
   the recent-session selection by id rather than by index.
 

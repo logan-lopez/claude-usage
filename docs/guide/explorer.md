@@ -41,8 +41,10 @@ and switch with Tab.
 The amounts are always whole-session totals, even when an activity filter is on.
 
 **Session Detail** opens with Enter on a session in Sessions or in Overview's recent sessions. It
-has a Summary and sections for models, attribution, tools and API blocks. Tool sections count
-calls; they don't assign tokens to tools. Esc goes back to where you were, with the same selection and filters.
+has a Summary and sections for models, attribution, tools and API blocks. The Summary gives
+durations in hours and minutes and times in UTC, to the minute. Tool sections count calls; they
+don't assign tokens to tools. Esc goes back to where you were, with the same selection and
+filters.
 
 ## Keys
 
@@ -62,6 +64,10 @@ calls; they don't assign tokens to tools. Esc goes back to where you were, with 
 While you're typing in search or a filter, keys are text: `q` or `1` won't quit or switch screens.
 Enter applies, Esc cancels, and Ctrl+C always quits.
 
+`?` is help for the screen you're on: its own keys and what its marks mean, then the keys that
+work everywhere. On Overview it's headed with the panel you're in. The footer shows only the keys
+that do something where you are: Enter appears on Overview only in Recent sessions.
+
 ## Staying current
 
 - The explorer notices new data in the archive within five seconds, from a background sync or
@@ -71,6 +77,8 @@ Enter applies, Esc cancels, and Ctrl+C always quits.
   `CUSAGE_REFRESH=off`.
 - If a read fails, the last good data stays on screen, marked outdated. If a fetch fails, the
   archived limits stay, with their ages.
+- Messages in the status line, like "Limits refreshed." or "Refresh guarded; retry in 3m", clear
+  after ten seconds. A warning that the archive couldn't be read stays until a read succeeds.
 
 ## Colours
 
