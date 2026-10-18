@@ -114,3 +114,17 @@ test("filter combinations and nonempty search preserve identity through Detail a
   await app.key("\t");
   expect(app.frame()).toContain("NOT server five-hour windows");
 });
+
+test("the Sessions table at 80×24 has no blank body row", async () => {
+  const { deps } = dependencies();
+  const app = mount(deps, 80, 24);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("2");
+  // 19 content rows: three above the table, its header, and 15 sessions.
+  expect(app.frame()).toContain("1–15 visible");
+  const lines = app.frame().split("\n");
+  const header = lines.findIndex((l) => l.includes("Name / project"));
+  const body = lines.slice(header + 1, header + 16);
+  expect(body.every((l) => /\d/.test(l))).toBe(true);
+  expect(lines[header + 16]).toContain("Archive browser");
+});

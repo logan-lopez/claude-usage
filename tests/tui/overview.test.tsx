@@ -87,3 +87,29 @@ test("stale and disagreeing limits keep source labels, and newest model fallback
   await app.key("k");
   expect(app.frame()).toContain("Diagnostics checked");
 });
+
+test("PageDown in a small Overview panel moves by that panel's visible rows", async () => {
+  const { deps } = dependencies();
+  const checks = Array.from({ length: 30 }, (_, i) => ({
+    name: `check-${i}`,
+    level: "ok" as const,
+    detail: "ok",
+  }));
+  const diagnose = deps.diagnostics;
+  deps.diagnostics = async () => ({ ...(await diagnose()), checks });
+  const app = mount(deps);
+  await until(() => app.frame().includes("check-0"));
+  await app.key("\t");
+  await app.key("\t");
+  // Full dashboard at 120×40: the Archive panel is 11 rows, one of them its title, and its
+  // viewport's last row is the position indicator, so a page is 9 rows.
+  await app.key("\u001b[6~");
+  expect(app.frame()).toContain("↑↓ 10–18 /");
+  await app.key("\u001b[5~");
+  expect(app.frame()).toContain("↑↓ 1–9 /");
+  // Compact at 80×24: one 18-row panel, so a page is 16 rows.
+  await app.resize(80, 24);
+  expect(app.frame()).toContain("Panel 2/5");
+  await app.key("\u001b[6~");
+  expect(app.frame()).toContain("↑↓ 17–32 /");
+});

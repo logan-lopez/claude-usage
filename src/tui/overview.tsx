@@ -15,6 +15,7 @@ import {
 } from "./components.tsx";
 import { age, isStale, num, spark } from "./text.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
+import { contentHeight, tableBodyRows, visibleRows } from "./layout.ts";
 
 export const panels = [
   "Server limits",
@@ -45,8 +46,8 @@ export const initialOverviewNav: OverviewNav = {
 /** Full dashboard row budget below the two top panels; they take the rest. */
 const FULL = { meters: 9, daily: 7, recent: 8 };
 const FULL_MIN_WIDTH = 110;
-/** Content height at a 36-row terminal (header, tabs and footer take 6). */
-const FULL_MIN_HEIGHT = 30;
+/** Content height at a 36-row terminal. */
+const FULL_MIN_HEIGHT = contentHeight(36);
 
 export function limitsLines(data: OverviewData, now: number): Line[] {
   const limits = data.limits;
@@ -207,7 +208,9 @@ export function Overview({
     data.recent.findIndex((r) => r.session_id === nav.recentId),
   );
   const selected = data.recent[recentIndex]?.session_id;
-  const pageHeight = height - 5;
+  /** Each panel pages by what it shows: its viewport, or Recent sessions' table body. */
+  const page = (panel: number) =>
+    panel === RECENT ? tableBodyRows(size(panel)[1] - 1) : visibleRows(size(panel)[1] - 1);
 
   useKeys((input, key) => {
     if (key.tab)
@@ -219,7 +222,7 @@ export function Overview({
       if (nav.panel === RECENT) onOpen(selected);
       return;
     }
-    const to = movement(input, key, pageHeight);
+    const to = movement(input, key, page(nav.panel));
     if (!to) return;
     if (nav.panel === RECENT)
       return setNav((n) => {

@@ -13,6 +13,7 @@ import {
 } from "./components.tsx";
 import { costLabel, num } from "./text.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
+import { visibleRows } from "./layout.ts";
 import type { Report } from "./useArchive.ts";
 
 export const sections = [
@@ -123,7 +124,7 @@ export function DetailScreen({
           : { ...s, section: cycle(s.section, d, sections.length) },
       );
     }
-    const to = movement(input, k, height - 5);
+    const to = movement(input, k, visibleRows(viewportHeight));
     if (to)
       update((s) => {
         const at = `${s.section}:${s.dimension}`;

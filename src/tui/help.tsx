@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Viewport, line, scrollMax, wrapLines } from "./components.tsx";
 import { movement, useKeys } from "./keys.ts";
+import { visibleRows } from "./layout.ts";
 
 const HELP = [
   "1 Overview · 2 Sessions · Tab / Shift+Tab focus panels or Detail sections",
@@ -49,7 +50,7 @@ export function Help({
   );
   const max = scrollMax(rows, height);
   useKeys((input, key) => {
-    const to = movement(input, key, height - 2);
+    const to = movement(input, key, visibleRows(height));
     if (to) setOffset((o) => to(o, max));
   });
   return (

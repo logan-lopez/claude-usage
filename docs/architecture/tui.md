@@ -15,6 +15,7 @@ with Overview, Sessions and Session Detail screens.
 | `src/tui/data.ts` | Opening the archive, the query-backed dependencies the screens read through, and the session page cache |
 | `src/tui/overview.tsx`, `sessions.tsx`, `detail.tsx`, `help.tsx` | Each renders its screen and owns its keys |
 | `src/tui/keys.ts` | Key routing (`useKeys`) and `movement()` |
+| `src/tui/layout.ts` | The row budget: minimum size, chrome rows, and how a viewport's height becomes a page |
 | `src/tui/text.ts` | Pure width, wrap and label helpers |
 | `src/tui/theme.ts` | The palettes, contrast checks and background detection |
 | `src/tui/components.tsx` | Shared pieces |
@@ -65,6 +66,10 @@ zero UTC days stay zero, and current readings are kept apart from historical pea
 
 **Layout.** The full dashboard starts at 110×36. From 80×24 up to that, compact mode shows one
 selectable panel at a time. Below 80×24 there's a resize notice.
+
+- A page is the rows its viewport shows. Every `movement()` page size comes from the viewport that
+  key scrolls (`visibleRows`, or `tableBodyRows` for a session table), so each Overview panel
+  pages by its own size, and Sessions fetches exactly its table's body rows.
 
 **Theme.** Before Ink starts, the TUI asks the terminal for its background (OSC 11) and picks the
 light or dark palette.

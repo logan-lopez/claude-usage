@@ -12,6 +12,7 @@ import {
 } from "./data.ts";
 import { Row, SessionTable } from "./components.tsx";
 import { movement, useKeys } from "./keys.ts";
+import { tableBodyRows } from "./layout.ts";
 import type { Report } from "./useArchive.ts";
 
 export type Filters = {
@@ -35,6 +36,11 @@ export type SessionOverlay =
   | "model"
   | "activity"
   | "sort";
+
+/** The search, filter and count rows above the table. */
+const FILTER_ROWS = 3;
+/** Table body rows on a Sessions screen of `height`: what one page fetches and PageDown moves. */
+export const sessionRows = (height: number) => tableBodyRows(height - FILTER_ROWS);
 
 /** Everything the table needs, committed together so one move is one render. */
 type View = {
@@ -151,7 +157,6 @@ export function SessionsScreen({
   archiveEmpty,
   width,
   height,
-  pageHeight,
   now,
   onOpen,
   onOverlay,
@@ -160,7 +165,6 @@ export function SessionsScreen({
   archiveEmpty: boolean;
   width: number;
   height: number;
-  pageHeight: number;
   now: number;
   onOpen: (id: string | undefined) => void;
   onOverlay: (overlay: SessionOverlay) => void;
@@ -171,7 +175,7 @@ export function SessionsScreen({
     if (input === "f") return onOverlay("filters");
     if (input === "s") return onOverlay("sort");
     if (key.return) return onOpen(sessions.selected());
-    const to = movement(input, key, pageHeight);
+    const to = movement(input, key, sessionRows(height));
     if (to) sessions.move(to);
   });
   return (
@@ -196,7 +200,7 @@ export function SessionsScreen({
           costs={view.costs}
           selected={selectedId(view)}
           width={width}
-          height={height - 3}
+          height={height - FILTER_ROWS}
           now={now}
         />
       ) : (

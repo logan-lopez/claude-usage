@@ -4,6 +4,7 @@ import { Box, Text } from "ink";
 import type { CostRow, SessionRow } from "../query.ts";
 import { age, costLabel, fit, num, wrap } from "./text.ts";
 import { palettes, type Palette, type Tone } from "./theme.ts";
+import { visibleRows } from "./layout.ts";
 
 export type { Tone };
 /** Set once by `App` (`MONO` for no colour); the default keeps components renderable on their own. */
@@ -68,9 +69,9 @@ export function Section({
 export const wrapLines = (lines: Line[], width: number): Line[] =>
   lines.flatMap((l) => wrap(l.text, width).map((text) => ({ ...l, text })));
 
-/** A viewport of `height` shows `height - 1` rows; the last row is the position indicator. */
+/** The furthest a viewport of `height` can scroll through `rows`. */
 export const scrollMax = (rows: Line[], height: number) =>
-  Math.max(0, rows.length - Math.max(1, height - 1));
+  Math.max(0, rows.length - visibleRows(height));
 
 export function Viewport({
   rows,
@@ -83,7 +84,7 @@ export function Viewport({
   width: number;
   height: number;
 }) {
-  const visible = Math.max(1, height - 1);
+  const visible = visibleRows(height);
   const start = Math.min(offset, scrollMax(rows, height));
   return (
     <Box flexDirection="column" height={height} overflow="hidden">

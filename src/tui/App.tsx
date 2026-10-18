@@ -12,20 +12,17 @@ import { Overview, initialOverviewNav, panels } from "./overview.tsx";
 import {
   SessionOverlayView,
   SessionsScreen,
+  sessionRows,
   useSessions,
   type SessionOverlay,
 } from "./sessions.tsx";
 import { DetailScreen, useDetail } from "./detail.tsx";
 import { Help } from "./help.tsx";
 import { KeyTarget, type KeyHandler } from "./keys.ts";
+import { MIN_COLUMNS, MIN_ROWS, contentHeight } from "./layout.ts";
 
 type Screen = "overview" | "sessions" | "detail";
 type Overlay = "help" | SessionOverlay | null;
-
-/** Header (3 rows) and footer (2 rows) around the content, plus one spare. */
-const CHROME_ROWS = 6;
-const MIN_COLUMNS = 80;
-const MIN_ROWS = 24;
 
 /** `MONO` has no colour overrides, so the terminal's own styling applies. */
 const theme = (palette: Palette) =>
@@ -77,8 +74,7 @@ export function App({
   const terminal = useWindowSize();
   const { columns: width, rows } = dimensions ?? terminal;
   const undersized = width < MIN_COLUMNS || rows < MIN_ROWS;
-  const height = Math.max(1, rows - CHROME_ROWS);
-  const pageHeight = Math.max(1, height - 5);
+  const height = contentHeight(rows);
   const palette = mono ? MONO : palettes[themeName];
   const { exit } = useApp();
   const [screen, setScreen] = useState<Screen>("overview");
@@ -89,7 +85,7 @@ export function App({
     sessions.reload();
     if (screen === "detail") detail.reload();
   });
-  const sessions = useSessions(deps, pageHeight, archive.report);
+  const sessions = useSessions(deps, sessionRows(height), archive.report);
   const detail = useDetail(deps, archive.report);
   const { data, now } = archive;
   const keys = useRef<KeyHandler | null>(null);
@@ -193,7 +189,6 @@ export function App({
         archiveEmpty={!data.inventory.requests}
         width={width}
         height={height}
-        pageHeight={pageHeight}
         now={now}
         onOpen={open}
         onOverlay={setOverlay}
