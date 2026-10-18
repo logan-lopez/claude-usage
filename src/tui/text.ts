@@ -56,12 +56,14 @@ export function wrap(value: string, width: number): string[] {
   return result;
 }
 
-export const num = (n: number) =>
-  n >= 1e6
-    ? `${(n / 1e6).toFixed(1)}M`
-    : n >= 1e3
-      ? `${(n / 1e3).toFixed(1)}K`
-      : String(n);
+/** Rounds to one decimal before choosing the unit, so 999,999 reads 1.0M rather than 1000.0K. */
+export function num(n: number) {
+  if (n < 1e3) return String(n);
+  const thousands = Math.round(n / 100) / 10;
+  return thousands < 1e3
+    ? `${thousands.toFixed(1)}K`
+    : `${(Math.round(n / 1e5) / 10).toFixed(1)}M`;
+}
 
 export const age = (timestamp: number | null, now: number) =>
   timestamp === null
@@ -84,10 +86,13 @@ export const costLabel = (c: CostRow | undefined) =>
     : `${c.basis === "estimated" ? "~" : ""}$${c.cost_usd.toFixed(2)}${c.cost_complete ? "" : "+"}`;
 
 const BARS = "▁▂▃▄▅▆▇█";
-/** Percent series as block glyphs. Missing samples stay `·`; gaps are never bridged. */
+/**
+ * Percent series as block glyphs, rounded as `cusage limits --history` rounds them. Missing samples
+ * stay `·`; gaps are never bridged.
+ */
 export const spark = (values: (number | null)[]) =>
   values
     .map((n) =>
-      n === null ? "·" : BARS[Math.max(0, Math.min(7, Math.floor((n / 100) * 7)))],
+      n === null ? "·" : BARS[Math.max(0, Math.min(7, Math.round((n / 100) * 7)))],
     )
     .join("");

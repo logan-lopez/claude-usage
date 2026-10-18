@@ -3,19 +3,28 @@ import { useEffect, useRef, useState } from "react";
 import { Box } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
 import type { CostRow, SessionRow, SessionSort } from "../query.ts";
-import {
-  activities,
-  activitySince,
-  SessionBrowser,
-  type Activity,
-  type TuiDependencies,
-} from "./data.ts";
+import { DAY, SessionBrowser, type TuiDependencies } from "./data.ts";
 import { Row, SessionTable } from "./components.tsx";
 import { movement, useKeys } from "./keys.ts";
 import { tableBodyRows } from "./layout.ts";
 import type { ScreenModel } from "./screen.ts";
 import { COST_MARKS } from "./help.tsx";
-import type { Report } from "./useArchive.ts";
+import { ARCHIVE_UNREADABLE, type Report } from "./useArchive.ts";
+
+export const activities = [
+  "All",
+  "Today UTC",
+  "Last 7 days",
+  "Last 30 days",
+] as const;
+type Activity = (typeof activities)[number];
+export function activitySince(activity: Activity, now: number) {
+  return activity === "All"
+    ? null
+    : activity === "Today UTC"
+      ? Math.floor(now / DAY) * DAY
+      : now - (activity === "Last 7 days" ? 7 : 30) * DAY;
+}
 
 export type Filters = {
   search: string;
@@ -186,13 +195,10 @@ function useSessions(
     },
     /** After an archive change: same filters, selection kept by session ID. */
     reload() {
-      attempt(
-        "Archive unreadable; last successful data retained (outdated). Run cusage sync or check --db.",
-        () => {
-          const b = create(current.current);
-          show(b, b.locate(selectedId(latest.current), latest.current.selection));
-        },
-      );
+      attempt(ARCHIVE_UNREADABLE, () => {
+        const b = create(current.current);
+        show(b, b.locate(selectedId(latest.current), latest.current.selection));
+      });
     },
     move(to: (selection: number, last: number) => number) {
       const b = browser.current;
@@ -320,21 +326,30 @@ function FilterEditor({
     );
   if (overlay === "activity")
     return (
-      <Select
-        options={options(activities)}
-        defaultValue={filters.activity}
-        onChange={(v) => onApply({ ...filters, activity: v as Activity })}
-      />
+      <Box flexDirection="column">
+        <Row
+          text="activity: sessions active in this window · Enter applies · Esc cancels"
+          width={width}
+        />
+        <Select
+          options={options(activities)}
+          defaultValue={filters.activity}
+          onChange={(v) => onApply({ ...filters, activity: v as Activity })}
+        />
+      </Box>
     );
   return (
-    <Select
-      options={[
-        { label: "Last activity descending", value: "activity" },
-        { label: "Total tokens descending", value: "tokens" },
-        { label: "Requests descending", value: "requests" },
-      ]}
-      defaultValue={filters.sort}
-      onChange={(v) => onApply({ ...filters, sort: v as SessionSort })}
-    />
+    <Box flexDirection="column">
+      <Row text="sort: order of the list · Enter applies · Esc cancels" width={width} />
+      <Select
+        options={[
+          { label: "Last activity descending", value: "activity" },
+          { label: "Total tokens descending", value: "tokens" },
+          { label: "Requests descending", value: "requests" },
+        ]}
+        defaultValue={filters.sort}
+        onChange={(v) => onApply({ ...filters, sort: v as SessionSort })}
+      />
+    </Box>
   );
 }

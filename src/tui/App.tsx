@@ -152,7 +152,7 @@ export function App({
   return (
     <PaletteContext.Provider value={palette}>
       <Box width={width} height={rows} flexDirection="column" overflow="hidden">
-        <Header data={data} now={now} width={width} />
+        <Header data={data} failed={!!archive.error} now={now} width={width} />
         <Row text={tabs.join("    ")} width={width} tone="accent" />
         <Box height={height} flexShrink={0} flexDirection="column" overflow="hidden">
           <KeyTarget.Provider value={keys}>
@@ -188,17 +188,34 @@ export function App({
   );
 }
 
-/** Binding limit first, then both meters and archive totals; every reading carries its age. */
+/**
+ * Binding limit first, then both meters and archive totals; every reading carries its age. Until
+ * the first read lands there are no totals to show, so it says so rather than showing zeros.
+ */
 function Header({
   data,
+  failed,
   now,
   width,
 }: {
   data: OverviewData | null;
+  /** The last read failed; with no data yet, the header says so instead of "Reading archive…". */
+  failed: boolean;
   now: number;
   width: number;
 }) {
-  const binding = data?.limits?.binding;
+  if (!data)
+    return (
+      <>
+        <Row
+          text={`cusage ▸ ${failed ? "Archive not read yet" : "Reading archive…"}`}
+          width={width}
+        />
+        {/* A Text holding "" renders no row at all. */}
+        <Row text=" " width={width} />
+      </>
+    );
+  const binding = data.limits?.binding;
   const stale = binding ? isStale(binding.tsMs, now) : false;
   const meter = (r: LimitReading | null | undefined) =>
     r
@@ -216,7 +233,7 @@ function Header({
         tone={stale ? "warning" : "text"}
       />
       <Row
-        text={`5h ${meter(data?.limits?.fiveHour)} · 7d ${meter(data?.limits?.sevenDay)} · ${num(data?.inventory.totals.total_tokens ?? 0)} tokens · ${num(data?.inventory.sessions ?? 0)} sessions`}
+        text={`5h ${meter(data.limits?.fiveHour)} · 7d ${meter(data.limits?.sevenDay)} · ${num(data.inventory.totals.total_tokens)} tokens · ${num(data.inventory.sessions)} sessions`}
         width={width}
         tone="muted"
       />

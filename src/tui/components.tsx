@@ -102,7 +102,10 @@ export function Viewport({
   );
 }
 
-/** One string per chart row, with the last (partial) bucket in the accent colour. */
+/**
+ * One string per chart row, with the last (partial) bucket in the accent colour. Any nonzero value
+ * gets at least the bottom block, so a small day never reads as a zero day; zero days keep `─`.
+ */
 export function BarChart({
   values,
   width,
@@ -117,7 +120,7 @@ export function BarChart({
   const peak = Math.max(1, ...values);
   const step = Math.max(1, Math.floor(width / values.length));
   const cell = (v: number, i: number) =>
-    (v > 0 && (v / peak) * height >= height - i
+    (v > 0 && (i === height - 1 || (v / peak) * height >= height - i)
       ? "█"
       : i === height - 1
         ? "─"

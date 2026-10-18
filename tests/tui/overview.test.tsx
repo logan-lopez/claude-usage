@@ -1,5 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
+import React from "react";
+import { render } from "ink-testing-library";
 import stringWidth from "string-width";
+import { BarChart } from "../../src/tui/components.tsx";
 import { limitsHistory } from "../../src/query.ts";
 import { fit } from "../../src/tui/text.ts";
 import { NOW, dependencies, mount, teardown, until } from "./helpers.tsx";
@@ -23,7 +26,7 @@ test("Overview → Detail → back, full layout and compact resize preserve sele
   await app.key("j");
   await app.key("\r");
   expect(app.frame()).toContain("Session Detail");
-  const identity = app.frame().match(/session_id: (.*)/)?.[1];
+  const identity = app.frame().match(/ID: (.*)/)?.[1];
   expect(identity).toBeTruthy();
   await app.key("\u001b");
   expect(app.frame()).toContain("Recent sessions");
@@ -112,4 +115,32 @@ test("PageDown in a small Overview panel moves by that panel's visible rows", as
   expect(app.frame()).toContain("Panel 2/5");
   await app.key("\u001b[6~");
   expect(app.frame()).toContain("↑↓ 17–32 /");
+});
+
+test("a small nonzero day gets the bottom block; a zero day keeps the baseline", () => {
+  const { lastFrame } = render(<BarChart values={[0, 1, 1000]} width={6} height={5} />);
+  const bottom = lastFrame()!.split("\n").at(-1)!;
+  expect(bottom.slice(0, 2)).toBe("─ ");
+  expect(bottom.slice(2, 4)).toBe("█ ");
+});
+
+test("Overview's hint offers Enter only on Recent sessions", async () => {
+  const { deps } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  const hint = () => app.frame().split("\n").at(-1)!;
+  expect(hint()).toContain("↑↓ select · Enter open");
+  await app.key("\t");
+  expect(hint()).toContain("↑↓ scroll");
+  expect(hint()).not.toContain("Enter");
+  for (let i = 0; i < 3; i++) await app.key("\t");
+  // Daily output doesn't scroll.
+  expect(hint()).not.toContain("↑↓");
+});
+
+test("the Archive panel's span reads in UTC minutes, not raw ISO", async () => {
+  const { deps } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Archive span"));
+  expect(app.frame()).toMatch(/Archive span: \d{4}-\d\d-\d\d \d\d:\d\d → \d{4}-\d\d-\d\d \d\d:\d\d/);
 });

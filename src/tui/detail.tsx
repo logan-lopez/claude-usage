@@ -1,7 +1,8 @@
 /** Session Detail: identity header over switchable, scrollable sections. */
 import { useMemo, useState } from "react";
 import { Box } from "ink";
-import type { CostRow, SessionDetail, TokenTotals } from "../query.ts";
+import type { CostRow, SessionDetail, SessionRow, TokenTotals } from "../query.ts";
+import { fmtDuration, fmtWhen } from "../time.ts";
 import type { TuiDependencies } from "./data.ts";
 import {
   Row,
@@ -18,17 +19,14 @@ import type { ScreenModel } from "./screen.ts";
 import { COST_MARKS } from "./help.tsx";
 import type { Report } from "./useArchive.ts";
 
-export const sections = [
-  "Summary",
-  "Models",
-  "Attribution",
-  "Tools",
-  "API blocks",
-];
-export const dimensions = ["Effort", "Agent", "Skill", "MCP server", "Plugin"];
-const ATTRIBUTION = sections.indexOf("Attribution");
+const SECTIONS = ["Summary", "Models", "Attribution", "Tools", "API blocks"] as const;
+type Section = (typeof SECTIONS)[number];
+const DIMENSIONS = ["Effort", "Agent", "Skill", "MCP server", "Plugin"] as const;
+type Dimension = (typeof DIMENSIONS)[number];
 
 type DetailState = {
+  /** Kept apart from `session` so a reread can find the session again if it comes back. */
+  id: string;
   /** null once the session has disappeared from the archive. */
   session: SessionDetail | null;
   cost: CostRow | undefined;
@@ -37,6 +35,7 @@ type DetailState = {
   /** Scroll position per section:dimension, so switching back keeps your place. */
   offsets: Record<string, number>;
 };
+const at = (s: DetailState) => `${s.section}:${s.dimension}`;
 
 const HELP = [
   "Tab and Shift+Tab change section. ← and → do too, except in Attribution, where they choose effort, agent, skill, MCP server or plugin.",
@@ -75,11 +74,12 @@ export function useDetailScreen({
   };
 }
 
+/** Navigation goes through functional updates, so keys delivered in one chunk compose. */
 function useDetail(deps: TuiDependencies, report: Report) {
   const [state, setState] = useState<DetailState | null>(null);
+  const update = (f: (s: DetailState) => DetailState) => setState((s) => s && f(s));
   return {
     state,
-    setState,
     /** Load a session and reset navigation. Returns whether Detail can open. */
     open(id: string | undefined) {
       if (!id) return false;
@@ -90,6 +90,7 @@ function useDetail(deps: TuiDependencies, report: Report) {
           return false;
         }
         setState({
+          id,
           session,
           cost: deps.costs([id])[id],
           section: 0,
@@ -104,17 +105,33 @@ function useDetail(deps: TuiDependencies, report: Report) {
     },
     /** After an archive change: reread the open session, keeping navigation. */
     reload() {
-      const id = state?.session?.session.session_id;
+      const id = state?.id;
       if (!id) return;
       try {
         const session = deps.detail(id);
         const cost = session ? deps.costs([id])[id] : undefined;
-        setState((s) => s && { ...s, session, cost });
+        update((s) => ({ ...s, session, cost }));
       } catch {
         report.error(
           "Session reread failed; last successful data retained (outdated).",
         );
       }
+    },
+    /** Tab, Shift+Tab: the next or previous section. */
+    section(delta: number) {
+      update((s) => ({ ...s, section: cycle(s.section, delta, SECTIONS.length) }));
+    },
+    /** ←→: the attribution dimension in Attribution; elsewhere there's none, so the section. */
+    dimension(delta: number) {
+      update((s) =>
+        SECTIONS[s.section] === "Attribution"
+          ? { ...s, dimension: cycle(s.dimension, delta, DIMENSIONS.length) }
+          : { ...s, section: cycle(s.section, delta, SECTIONS.length) },
+      );
+    },
+    /** Scroll the current section by a `movement()`, clamped to `max`. */
+    scroll(to: (current: number, max: number) => number, max: number) {
+      update((s) => ({ ...s, offsets: { ...s.offsets, [at(s)]: to(s.offsets[at(s)] ?? 0, max) } }));
     },
   };
 }
@@ -133,66 +150,52 @@ function DetailScreen({
 }) {
   const state = detail.state!;
   const { session, cost, section, dimension } = state;
-  const key = `${section}:${dimension}`;
-  const viewportHeight = height - 3;
+  const name = SECTIONS[section]!;
+  // A session that's gone has no totals to show, so it loses that row.
+  const viewportHeight = height - (session ? 3 : 2);
   const rows = useMemo(
     () =>
       wrapLines(
         session
-          ? detailLines(session, cost, section, dimension)
+          ? SECTION_LINES[name](session, cost, DIMENSIONS[dimension]!)
           : [line("Session no longer available in the archive.")],
         width,
       ),
-    [session, cost, section, dimension, width],
+    [session, cost, name, dimension, width],
   );
   const max = scrollMax(rows, viewportHeight);
   useKeys((input, k) => {
-    const update = (f: (s: DetailState) => DetailState) =>
-      detail.setState((s) => s && f(s));
     if (k.escape) return onBack();
-    if (k.tab)
-      return update((s) => ({
-        ...s,
-        section: cycle(s.section, k.shift ? -1 : 1, sections.length),
-      }));
-    if (k.leftArrow || k.rightArrow) {
-      const d = k.leftArrow ? -1 : 1;
-      return update((s) =>
-        s.section === ATTRIBUTION
-          ? { ...s, dimension: cycle(s.dimension, d, dimensions.length) }
-          : { ...s, section: cycle(s.section, d, sections.length) },
-      );
-    }
+    if (k.tab) return detail.section(k.shift ? -1 : 1);
+    if (k.leftArrow || k.rightArrow) return detail.dimension(k.leftArrow ? -1 : 1);
     const to = movement(input, k, visibleRows(viewportHeight));
-    if (to)
-      update((s) => {
-        const at = `${s.section}:${s.dimension}`;
-        return { ...s, offsets: { ...s.offsets, [at]: to(s.offsets[at] ?? 0, max) } };
-      });
+    if (to) detail.scroll(to, max);
   });
   const s = session?.session;
   return (
     <Box flexDirection="column">
       <Row
-        text={`Session: ${s?.slug ?? s?.session_id ?? "unavailable"} / ${s?.project ?? "—"}`}
+        text={`Session: ${s ? (s.slug ?? s.session_id) : state.id} / ${s?.project ?? "—"}`}
         width={width}
         tone="accent"
       />
-      <Row
-        text={`${num(s?.requests ?? 0)} requests · ${num(s?.total_tokens ?? 0)} tokens · ${costLabel(cost)} whole-session`}
-        width={width}
-      />
+      {s && (
+        <Row
+          text={`${num(s.requests)} requests · ${num(s.total_tokens)} tokens · ${costLabel(cost)} whole-session`}
+          width={width}
+        />
+      )}
       <Row
         text={
-          sections.map((name, i) => `${i === section ? "▸" : ""}${name}`).join("  ") +
-          (section === ATTRIBUTION ? ` · ${dimensions[dimension]}` : "")
+          SECTIONS.map((n, i) => `${i === section ? "▸" : ""}${n}`).join("  ") +
+          (name === "Attribution" ? ` · ${DIMENSIONS[dimension]}` : "")
         }
         width={width}
         tone="muted"
       />
       <Viewport
         rows={rows}
-        offset={state.offsets[key] ?? 0}
+        offset={state.offsets[at(state)] ?? 0}
         width={width}
         height={viewportHeight}
       />
@@ -212,48 +215,56 @@ const tokenLines = (t: TokenTotals, prefix = "") => [
   ),
 ];
 
-const SUMMARY_FIELDS = [
-  "session_id",
-  "slug",
-  "project",
-  "cwd",
-  "git_branch",
-  "entrypoint",
-  "first_ts",
-  "last_ts",
-  "total_duration_ms",
-  "total_api_duration_ms",
-  "total_tool_duration_ms",
-] as const;
+const duration = (ms: number | null) => (ms === null ? null : fmtDuration(ms));
+const when = (ts: string | null) => (ts === null ? null : fmtWhen(ts));
 
-export function detailLines(
-  d: SessionDetail,
-  cost: CostRow | undefined,
-  section: number,
-  dimension: number,
-): Line[] {
-  const s = d.session;
-  if (section === 0)
-    return [
-      ...SUMMARY_FIELDS.map((key) => line(`${key}: ${s[key] ?? "unavailable"}`)),
-      ...tokenLines(s, "Whole session: "),
-      ...tokenLines(d.main, "Main: "),
-      ...tokenLines(d.sidechain, "Sub-agent / sidechain: "),
-      line(`Cost: ${costLabel(cost)} · ${cost?.source ?? "unavailable"}`),
-      line(
-        "Measured and estimated subtotals are never combined. ~ estimated; + partial known-rate amount.",
-      ),
-      ...(cost?.unknown_tier_requests
-        ? [
-            line(
-              `${cost.unknown_tier_requests} requests with unknown context tier; [1m] cannot be inferred. Cache creation uses the supplied 5m rate.`,
-              "warning",
-            ),
-          ]
-        : []),
-      ...(cost?.reasons.map((r) => line(r, "warning")) ?? []),
-    ];
-  if (section === 1) {
+/** The Summary's identity rows, in plain words and readable units. */
+const SUMMARY_FIELDS: [label: string, value: (s: SessionRow) => string | null][] = [
+  ["ID", (s) => s.session_id],
+  ["Name", (s) => s.slug],
+  ["Project", (s) => s.project],
+  ["Directory", (s) => s.cwd],
+  ["Branch", (s) => s.git_branch],
+  ["Entrypoint", (s) => s.entrypoint],
+  ["First", (s) => when(s.first_ts)],
+  ["Last", (s) => when(s.last_ts)],
+  ["Duration", (s) => duration(s.total_duration_ms)],
+  ["API time", (s) => duration(s.total_api_duration_ms)],
+  ["Tool time", (s) => duration(s.total_tool_duration_ms)],
+];
+
+const ATTRIBUTION_ROWS: Record<Dimension, (d: SessionDetail) => SessionDetail["byEffort"]> = {
+  Effort: (d) => d.byEffort,
+  Agent: (d) => d.byAgent,
+  Skill: (d) => d.bySkill,
+  "MCP server": (d) => d.byMcpServer,
+  Plugin: (d) => d.byPlugin,
+};
+
+const SECTION_LINES: Record<
+  Section,
+  (d: SessionDetail, cost: CostRow | undefined, dimension: Dimension) => Line[]
+> = {
+  Summary: (d, cost) => [
+    ...SUMMARY_FIELDS.map(([label, value]) => line(`${label}: ${value(d.session) ?? "unavailable"}`)),
+    ...tokenLines(d.session, "Whole session: "),
+    ...tokenLines(d.main, "Main: "),
+    ...tokenLines(d.sidechain, "Sub-agent / sidechain: "),
+    line(`Cost: ${costLabel(cost)} · ${cost?.source ?? "unavailable"}`),
+    line(
+      "Measured and estimated subtotals are never combined. ~ estimated; + partial known-rate amount.",
+    ),
+    ...(cost?.unknown_tier_requests
+      ? [
+          line(
+            `${cost.unknown_tier_requests} requests with unknown context tier; [1m] cannot be inferred. Cache creation uses the supplied 5m rate.`,
+            "warning",
+          ),
+        ]
+      : []),
+    ...(cost?.reasons.map((r) => line(r, "warning")) ?? []),
+  ],
+  Models: (d) => {
     if (!d.byModel.length) return [line("No model attribution archived.")];
     const measured = new Map(d.costModels.map((c) => [c.model, c]));
     return [
@@ -271,44 +282,32 @@ export function detailLines(
           ),
         ),
     ];
-  }
-  if (section === ATTRIBUTION) {
-    const rows = [d.byEffort, d.byAgent, d.bySkill, d.byMcpServer, d.byPlugin][
-      dimension
-    ]!;
-    return [
-      line(
-        `${dimensions[dimension]} · ←/→ changes attribution dimension`,
-        "muted",
-      ),
-      line(
-        "(none) identifies unattributed requests; every request remains in coverage.",
-      ),
-      ...rows.flatMap((r) => [
-        line(`${r.key} · ${r.requests} / ${s.requests} requests`),
-        ...tokenLines(r),
-      ]),
-    ];
-  }
-  if (section === 3)
-    return d.byTool.length
+  },
+  Attribution: (d, _, dimension) => [
+    line(`${dimension} · ←/→ changes attribution dimension`, "muted"),
+    line("(none) identifies unattributed requests; every request remains in coverage."),
+    ...ATTRIBUTION_ROWS[dimension](d).flatMap((r) => [
+      line(`${r.key} · ${r.requests} / ${d.session.requests} requests`),
+      ...tokenLines(r),
+    ]),
+  ],
+  Tools: (d) =>
+    d.byTool.length
       ? [
-          line(
-            "Call counts only; no per-tool token consumption is assigned.",
-            "muted",
-          ),
+          line("Call counts only; no per-tool token consumption is assigned.", "muted"),
           ...d.byTool.map((t) => line(`${t.key} · ${t.calls} calls`)),
         ]
-      : [line("No tool calls archived for this session.")];
-  return d.blocks.length
-    ? [
-        line("Session API blocks — NOT server five-hour windows.", "warning"),
-        ...d.blocks.flatMap((b) => [
-          line(
-            `Block ${b.api_block_index ?? "unattributed"} · ${b.first_ts ?? "—"} → ${b.last_ts ?? "—"}`,
-          ),
-          ...tokenLines(b),
-        ]),
-      ]
-    : [line("No session API blocks archived.")];
-}
+      : [line("No tool calls archived for this session.")],
+  "API blocks": (d) =>
+    d.blocks.length
+      ? [
+          line("Session API blocks — NOT server five-hour windows.", "warning"),
+          ...d.blocks.flatMap((b) => [
+            line(
+              `Block ${b.api_block_index ?? "unattributed"} · ${when(b.first_ts) ?? "—"} → ${when(b.last_ts) ?? "—"}`,
+            ),
+            ...tokenLines(b),
+          ]),
+        ]
+      : [line("No session API blocks archived.")],
+};

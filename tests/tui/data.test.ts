@@ -7,8 +7,8 @@ import {
   archiveDependencies,
   openArchive,
   dataVersion,
-  activitySince,
 } from "../../src/tui/data.ts";
+import { activitySince } from "../../src/tui/sessions.tsx";
 import {
   sessionPage,
   sessionCosts,

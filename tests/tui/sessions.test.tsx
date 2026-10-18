@@ -61,7 +61,7 @@ test("page navigation exceeds 100 rows and reload preserves selection by ID", as
   await app.key("\u001b[F");
   expect(app.frame()).toContain(`${sessionPage(db).total} matching`);
   await app.key("\r");
-  const id = app.frame().match(/session_id: (.*)/)?.[1];
+  const id = app.frame().match(/ID: (.*)/)?.[1];
   expect(id).toBeTruthy();
   await app.key("\u001b");
   db.query("UPDATE sessions SET last_ts_ms=? WHERE session_id=?").run(
@@ -127,4 +127,19 @@ test("the Sessions table at 80×24 has no blank body row", async () => {
   const body = lines.slice(header + 1, header + 16);
   expect(body.every((l) => /\d/.test(l))).toBe(true);
   expect(lines[header + 16]).toContain("Archive browser");
+});
+
+test("the Activity and Sort selects have a heading row", async () => {
+  const { deps } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("2");
+  await app.key("s");
+  expect(app.frame()).toContain("sort: order of the list · Enter applies · Esc cancels");
+  await app.key("\u001b");
+  await app.key("f");
+  await app.key("\u001b[B");
+  await app.key("\u001b[B");
+  await app.key("\r");
+  expect(app.frame()).toContain("activity: sessions active in this window");
 });

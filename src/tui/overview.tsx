@@ -14,6 +14,7 @@ import {
   type Line,
 } from "./components.tsx";
 import { age, isStale, num, spark } from "./text.ts";
+import { fmtWhen } from "../time.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
 import { contentHeight, tableBodyRows, visibleRows } from "./layout.ts";
 import { tabKeys, type ScreenModel } from "./screen.ts";
@@ -45,6 +46,15 @@ const initialOverviewNav: OverviewNav = {
   recentId: undefined,
 };
 
+/** What ↑↓ and Enter do in each panel: only Recent sessions opens one; Daily output doesn't scroll. */
+const PANEL_KEYS = [
+  "↑↓ scroll · ",
+  "↑↓ scroll · ",
+  "↑↓ scroll · ",
+  "",
+  "↑↓ select · Enter open · ",
+];
+
 const HELP = [
   "Tab and Shift+Tab move between the five panels. ↑↓ or j/k scroll the focused one, PageUp and PageDown by a page, Home and End to either end.",
   "In Recent sessions, ↑↓ chooses a session and Enter opens it.",
@@ -73,7 +83,7 @@ export function limitsLines(data: OverviewData, now: number): Line[] {
             `${name} ${r.percent ?? "—"}% · ${r.source} · ${age(r.tsMs, now)}${staleMark(r.tsMs)}`,
             isStale(r.tsMs, now) ? "warning" : "text",
           ),
-          line(`  resets ${r.resetsAt ?? "unknown"}`, "muted"),
+          line(`  resets ${r.resetsAt ? fmtWhen(r.resetsAt) : "unknown"}`, "muted"),
         ]
       : [line(`${name} unavailable`, "warning")];
   return [
@@ -83,7 +93,7 @@ export function limitsLines(data: OverviewData, now: number): Line[] {
         s.is_active ? "accent" : "text",
       ),
       line(
-        `  ${s.source} · ${age(s.tsMs, now)}${staleMark(s.tsMs)} · reset ${s.resets_at ?? "unknown"}`,
+        `  ${s.source} · ${age(s.tsMs, now)}${staleMark(s.tsMs)} · reset ${s.resets_at ? fmtWhen(s.resets_at) : "unknown"}`,
         isStale(s.tsMs, now) ? "warning" : "muted",
       ),
     ]),
@@ -117,7 +127,7 @@ function archiveLines(
       `${num(a.requests)} requests · ${num(a.sessions)} sessions · ${num(a.projects)} projects`,
     ),
     line(`${num(a.totals.total_tokens)} tokens · ${num(a.limitSamples)} limit samples`),
-    line(`Archive span: ${a.firstTs ?? "empty"} → ${a.lastTs ?? "empty"}`, "muted"),
+    line(`Archive span: ${a.firstTs ? fmtWhen(a.firstTs) : "empty"} → ${a.lastTs ? fmtWhen(a.lastTs) : "empty"}`, "muted"),
     line(
       `Latest archived request: ${age(a.lastTs ? Date.parse(a.lastTs) : null, now)}`,
       "muted",
@@ -179,7 +189,7 @@ export function useOverviewScreen({
   return {
     title: "Overview",
     context: panels[nav.panel],
-    hints: `${tabKeys} tabs · Tab panel · ↑↓ scroll/select · Enter open · r reread · R fetch · ? help · q quit`,
+    hints: `${tabKeys} tabs · Tab panel · ${PANEL_KEYS[nav.panel]}r reread · R fetch · ? help · q quit`,
     help: HELP,
     overlay: false,
     render: (frame) => (

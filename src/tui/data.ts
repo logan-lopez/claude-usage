@@ -1,4 +1,7 @@
-/** Archive lifecycle and bounded page cache. No rendering and no SQL aggregation. */
+/**
+ * Opening the archive, the query-backed dependencies the screens read through, and the session page
+ * cache. No rendering and no SQL aggregation.
+ */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { SCHEMA_VERSION } from "../schema.ts";
@@ -59,20 +62,6 @@ export const dataVersion = (db: Database) =>
   (db.query("PRAGMA data_version").get() as { data_version: number })
     .data_version;
 export const DAY = 86_400_000;
-export const activities = [
-  "All",
-  "Today UTC",
-  "Last 7 days",
-  "Last 30 days",
-] as const;
-export type Activity = (typeof activities)[number];
-export function activitySince(activity: Activity, now: number) {
-  return activity === "All"
-    ? null
-    : activity === "Today UTC"
-      ? Math.floor(now / DAY) * DAY
-      : now - (activity === "Last 7 days" ? 7 : 30) * DAY;
-}
 export function readOverview(db: Database, now: number) {
   const today = Math.floor(now / DAY) * DAY;
   const hour = Math.floor(now / 3_600_000) * 3_600_000;
@@ -152,7 +141,11 @@ export function archiveDependencies(
 
 const PAGE = 100;
 
-/** Pages are fetched on demand; identity lookup after reload doesn't price skipped pages. */
+/**
+ * Pages are fetched on demand; identity lookup after reload doesn't price skipped pages. Pages and
+ * costs are never evicted: a browser lives until the next filter change or reload replaces it, which
+ * bounds it at the archive's session count (hundreds to low thousands).
+ */
 export class SessionBrowser {
   private pages = new Map<number, query.SessionRow[]>();
   costs: Record<string, query.CostRow> = {};

@@ -162,7 +162,7 @@ test("keys delivered in one chunk compose, and Detail scrolls back from End in o
   await app.key("2");
   await app.key("jjj");
   await app.key("\r");
-  expect(app.frame()).toContain(`session_id: ${target.session_id}`);
+  expect(app.frame()).toContain(`ID: ${target.session_id}`);
   await app.key("\u001b[F");
   const end = app.frame().match(/↑↓ (\d+)–/)?.[1];
   expect(end).toBeTruthy();
@@ -230,4 +230,28 @@ test("help shows the screen's own lines, then the shell's, with its own footer",
   await app.key("\u001b");
   await app.key("/");
   expect(app.frame()).toContain("Enter apply · Esc close/cancel");
+});
+
+test("notices clear ten seconds after they appear; guarded refresh says when to retry", async () => {
+  const { deps, tick } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("R");
+  await until(() => app.frame().includes("Refresh guarded; retry in 3m"));
+  tick(9_000);
+  await new Promise((r) => setTimeout(r, 1100));
+  expect(app.frame()).toContain("Refresh guarded");
+  tick(1_000);
+  await new Promise((r) => setTimeout(r, 1100));
+  expect(app.frame()).not.toContain("Refresh guarded");
+  expect(app.frame()).toContain("Archive browser");
+});
+
+test("the header says it's reading until the first read lands, not zero totals", async () => {
+  const { deps } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  expect(app.frames[0]).toContain("Reading archive…");
+  expect(app.frames[0]).not.toContain("0 tokens");
+  expect(app.frame()).not.toContain("cusage ▸ Reading archive");
 });

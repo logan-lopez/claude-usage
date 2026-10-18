@@ -10,6 +10,10 @@ export interface Report {
   ok: () => void;
 }
 
+/** Shown when a reread fails; the last good data stays on screen. */
+export const ARCHIVE_UNREADABLE =
+  "Archive unreadable; last successful data retained (outdated). Run cusage sync or check --db.";
+
 const HOUR = 3_600_000;
 /**
  * Every label derived from `now` has minute resolution, so the clock only
@@ -17,13 +21,24 @@ const HOUR = 3_600_000;
  * committing every ten keeps ages prompt without redrawing the screen per tick.
  */
 const CLOCK_BUCKET_MS = 10_000;
+/** A notice clears this long after it appears, on the clock's one-second tick. Errors don't. */
+export const NOTICE_MS = 10_000;
+
+/** `2m`, rounded up; under a minute, seconds. */
+const wait = (ms: number) =>
+  ms >= 60_000 ? `${Math.ceil(ms / 60_000)}m` : `${Math.max(1, Math.ceil(ms / 1000))}s`;
 
 export function useArchive(deps: TuiDependencies, onReload: () => void) {
   const [now, setNow] = useState(deps.now);
   const [data, setData] = useState<OverviewData | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeText] = useState("");
+  const noticeAt = useRef<number | null>(null);
+  const setNotice = (text: string) => {
+    noticeAt.current = deps.now();
+    setNoticeText(text);
+  };
   const [fetching, setFetching] = useState(false);
   const alive = useRef(true);
   const version = useRef<number | null>(null);
@@ -44,9 +59,7 @@ export function useArchive(deps: TuiDependencies, onReload: () => void) {
       setError("");
       version.current = observed;
     } catch {
-      setError(
-        "Archive unreadable; last successful data retained (outdated). Run cusage sync or check --db.",
-      );
+      setError(ARCHIVE_UNREADABLE);
       return;
     }
     latest.current.onReload();
@@ -76,7 +89,7 @@ export function useArchive(deps: TuiDependencies, onReload: () => void) {
         result.ok
           ? "Limits refreshed."
           : result.reason === "guard"
-            ? `Refresh guarded; retry after ${new Date(deps.now() + (result.waitMs ?? 0)).toISOString()}`
+            ? `Refresh guarded; retry in ${wait(result.waitMs ?? 0)}`
             : result.reason === "disabled"
               ? "Refresh disabled by CUSAGE_REFRESH=off."
               : `Refresh ${result.reason}: ${result.error ?? "archived limits retained"}`,
@@ -117,6 +130,10 @@ export function useArchive(deps: TuiDependencies, onReload: () => void) {
     const clock = setInterval(() => {
       if (!alive.current) return;
       const next = deps.now();
+      if (noticeAt.current !== null && next - noticeAt.current >= NOTICE_MS) {
+        noticeAt.current = null;
+        setNoticeText("");
+      }
       setNow((prev) =>
         Math.floor(prev / CLOCK_BUCKET_MS) === Math.floor(next / CLOCK_BUCKET_MS)
           ? prev
