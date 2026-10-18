@@ -1,5 +1,5 @@
 /** Overview: five panels, all visible at 110×36+, one at a time down to 80×24. */
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Box } from "ink";
 import type { Diagnostics, OverviewData } from "./data.ts";
 import {
@@ -186,6 +186,12 @@ export function useOverviewScreen({
   open: (id: string | undefined) => void;
 }): ScreenModel {
   const [nav, setNav] = useState(initialOverviewNav);
+  // What was last committed, so keys delivered in one stdin chunk each see the one before.
+  const latest = useRef(nav);
+  const update = (f: (n: OverviewNav) => OverviewNav) => {
+    latest.current = f(latest.current);
+    setNav(latest.current);
+  };
   return {
     title: "Overview",
     context: panels[nav.panel],
@@ -200,7 +206,8 @@ export function useOverviewScreen({
         width={frame.width}
         height={frame.height}
         nav={nav}
-        setNav={setNav}
+        latest={latest}
+        update={update}
         onOpen={open}
       />
     ),
@@ -214,7 +221,8 @@ function Overview({
   width,
   height,
   nav,
-  setNav,
+  latest,
+  update,
   onOpen,
 }: {
   data: OverviewData;
@@ -223,7 +231,8 @@ function Overview({
   width: number;
   height: number;
   nav: OverviewNav;
-  setNav: React.Dispatch<React.SetStateAction<OverviewNav>>;
+  latest: React.RefObject<OverviewNav>;
+  update: (f: (n: OverviewNav) => OverviewNav) => void;
   onOpen: (id: string | undefined) => void;
 }) {
   const full = width >= FULL_MIN_WIDTH && height >= FULL_MIN_HEIGHT;
@@ -253,42 +262,37 @@ function Overview({
     }),
     [limits, archive, meters, width, full],
   );
-  const recentIndex = Math.max(
-    0,
-    data.recent.findIndex((r) => r.session_id === nav.recentId),
-  );
-  const selected = data.recent[recentIndex]?.session_id;
+  const recentAt = (id: string | undefined) =>
+    Math.max(0, data.recent.findIndex((r) => r.session_id === id));
+  const selected = data.recent[recentAt(nav.recentId)]?.session_id;
   /** Each panel pages by what it shows: its viewport, or Recent sessions' table body. */
   const page = (panel: number) =>
     panel === RECENT ? tableBodyRows(size(panel)[1] - 1) : visibleRows(size(panel)[1] - 1);
 
+  // Every branch reads `latest`, not this render's `nav`: a Tab, ↓ or Enter earlier in the same
+  // chunk has already moved it.
   useKeys((input, key) => {
+    const n = latest.current;
     if (key.tab)
-      return setNav((n) => ({
+      return update((n) => ({
         ...n,
         panel: cycle(n.panel, key.shift ? -1 : 1, panels.length),
       }));
     if (key.return) {
-      if (nav.panel === RECENT) onOpen(selected);
+      if (n.panel === RECENT) onOpen(data.recent[recentAt(n.recentId)]?.session_id);
       return;
     }
-    const to = movement(input, key, page(nav.panel));
+    const to = movement(input, key, page(n.panel));
     if (!to) return;
-    if (nav.panel === RECENT)
-      return setNav((n) => {
-        const at = Math.max(
-          0,
-          data.recent.findIndex((r) => r.session_id === n.recentId),
-        );
-        return {
-          ...n,
-          recentId: data.recent[to(at, data.recent.length - 1)]?.session_id,
-        };
-      });
-    const rows = scrollable[nav.panel];
+    if (n.panel === RECENT)
+      return update((n) => ({
+        ...n,
+        recentId: data.recent[to(recentAt(n.recentId), data.recent.length - 1)]?.session_id,
+      }));
+    const rows = scrollable[n.panel];
     if (!rows) return;
-    const max = scrollMax(rows, size(nav.panel)[1] - 1);
-    setNav((n) => ({
+    const max = scrollMax(rows, size(n.panel)[1] - 1);
+    update((n) => ({
       ...n,
       offsets: n.offsets.map((o, i) => (i === n.panel ? to(o, max) : o)),
     }));

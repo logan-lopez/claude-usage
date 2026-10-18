@@ -255,3 +255,20 @@ test("the header says it's reading until the first read lands, not zero totals",
   expect(app.frames[0]).not.toContain("0 tokens");
   expect(app.frame()).not.toContain("cusage ▸ Reading archive");
 });
+
+test("keys in one chunk see each other on Overview, and none reach a screen that's gone", async () => {
+  const { db, deps } = dependencies();
+  const second = sessionPage(db, { pageSize: 6 }).rows[1]!;
+  const app = mount(deps, 80, 24);
+  await until(() => app.frame().includes("Recent sessions"));
+  // ↓ then Enter: Enter opens the session ↓ just moved to.
+  await app.key("\u001b[B\r");
+  expect(app.frame()).toContain(`ID: ${second.session_id}`);
+  await app.key("\u001b");
+  // Tab then ↓: the ↓ scrolls the newly focused panel, and Recent sessions keeps its selection.
+  await app.key("\t\u001b[B");
+  expect(app.frame()).toContain("Panel 1/5");
+  await app.key("\u001b[Z");
+  await app.key("\r");
+  expect(app.frame()).toContain(`ID: ${second.session_id}`);
+});

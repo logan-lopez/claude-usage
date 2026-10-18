@@ -73,11 +73,19 @@ export function App({
   });
   const { data, now, report } = archive;
 
-  const detail = useDetailScreen({ deps, report, back: () => setScreen(origin) });
+  /**
+   * Change what's on screen. The old screen's handler stays in `keys` until the next commit, so a
+   * key later in the same chunk would reach it; dropping that key is better than misrouting it.
+   */
+  const show = (id: ScreenId) => {
+    keys.current = null;
+    setScreen(id);
+  };
+  const detail = useDetailScreen({ deps, report, back: () => show(origin) });
   const open = (id: string | undefined) => {
     if (!detail.open(id)) return;
     if (isTab(screen)) setOrigin(screen);
-    setScreen("detail");
+    show("detail");
   };
   const overview = useOverviewScreen({ open });
   const sessions = useSessionsScreen({ deps, report, height, open });
@@ -108,11 +116,14 @@ export function App({
       return keys.current?.(input, key);
     }
     if (input === "q") return quit();
-    if (input === "?") return setHelp(true);
+    if (input === "?") {
+      keys.current = null;
+      return setHelp(true);
+    }
     if (input === "r") return archive.reread();
     if (input === "R") return archive.refresh();
     const tab = TABS.find((t) => t.key === input);
-    if (tab) return setScreen(tab.id);
+    if (tab) return show(tab.id);
     keys.current?.(input, key);
   });
 

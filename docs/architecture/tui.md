@@ -119,6 +119,11 @@ light or dark palette.
   would drop a key that arrives before that effect runs.
 - **Printable keys that queue behind a slow frame arrive as one string (`"jjj"`).** `movement()`
   counts them rather than ignoring the chunk.
+- **Keys in one chunk reach the handler with no render between them.** Ink splits `"\x1b[B\r"`
+  into ↓ and Enter in one synchronous loop, so a handler reads the last committed state from a
+  ref, never its render's props. When the shell changes screen or opens help it clears
+  `keys.current`, so the rest of that chunk is dropped rather than sent to the screen that's
+  gone.
 - **Inputs and overlays own the keyboard.** `q` typed into search is text. Ctrl+C always quits.
 - **`string-width` is pinned to the exact version Ink resolves, and patched.**
   `patches/string-width@8.2.2.patch` memoizes per-cluster widths.
