@@ -3,32 +3,34 @@ import { Viewport, line, scrollMax, wrapLines } from "./components.tsx";
 import { movement, useKeys } from "./keys.ts";
 import { visibleRows } from "./layout.ts";
 
-const HELP = [
-  "1 Overview · 2 Sessions · Tab / Shift+Tab focus panels or Detail sections",
-  "↑↓ or j/k move / scroll · PageUp / PageDown · Home / End",
-  "Enter opens selected session · Esc returns from Detail or cancels an overlay",
-  "/ edit search (ID or name, case-insensitive) · f project/model/activity filters · s sort",
-  "Filters select sessions. Displayed tokens and costs are WHOLE-SESSION totals, not spend within a filter.",
-  "Detail: Tab changes section; Attribution: ←/→ selects effort, agent, skill, MCP server or plugin.",
-  "r rereads archive and reruns credential-free diagnostics; no ingestion or fetch.",
-  "R explicitly fetches limits using the shared attempt floor; CUSAGE_REFRESH=off disables it.",
-  "q quits outside overlays. Ctrl+C always quits. Text inputs and overlays own keyboard input.",
-  "$ measured cumulative session cost-state · ~$ estimated using committed rates · + partial known-rate subtotal.",
-  "Unavailable means wholly unpriced. Measured and estimated subtotals are never combined.",
-  "Unknown context tiers and unknown rates are disclosed in Detail. No per-tool token costs are assigned.",
-  "Meters show hourly peaks, not current readings. · is missing; gaps are never interpolated.",
-  "Daily output is archived local usage in UTC. Zero days remain present; today is partial.",
-  "Archive diagnostics report operational evidence, not inferred agent health; ordinary browsing never probes credentials.",
+/** What every cost column's marks mean; shared by the screens that show costs. */
+export const COST_MARKS = [
+  "$ is Claude Code's own cost record for the session. ~$ is an estimate from the price table, for sessions without one. A trailing + means some requests couldn't be priced and aren't in the amount. unavailable means none could.",
+  "Measured and estimated amounts are never added together.",
+];
+
+/** The shell's own keys, shown under every screen's help. `tabs` is e.g. "1 Overview · 2 Sessions". */
+const shellHelp = (tabs: string) => [
+  `${tabs} switch screens. ? opens this help; Esc closes it.`,
+  "r rereads the archive and reruns the health checks. It fetches and ingests nothing.",
+  "R fetches fresh limits, with the same 3-minute spacing as the CLI. CUSAGE_REFRESH=off turns it off.",
+  "q quits, except while you're typing in search or a filter. Ctrl+C always quits.",
 ];
 
 /** Contextual help. Mounted fresh on each open, so it always starts at the top. */
 export function Help({
   title,
+  lines,
+  tabs,
   width,
   height,
   themeNote,
 }: {
   title: string;
+  /** The screen's own lines; the shell's follow them. */
+  lines: string[];
+  /** The tabs and their keys, e.g. "1 Overview · 2 Sessions". */
+  tabs: string;
   width: number;
   height: number;
   themeNote?: string;
@@ -38,22 +40,24 @@ export function Help({
     () =>
       wrapLines(
         [
-          `${title} help`,
-          ...HELP,
+          line(`${title} help`, "accent"),
+          ...lines.map((t) => line(t)),
+          // A Text holding "" renders no row at all.
+          line(" "),
+          line("Everywhere", "muted"),
+          ...shellHelp(tabs).map((t) => line(t)),
           ...(themeNote
-            ? [`Theme: ${themeNote}. Override with CUSAGE_THEME=light|dark|auto or --theme.`]
+            ? [line(`Theme: ${themeNote}. Override with CUSAGE_THEME=light|dark|auto or --theme.`, "muted")]
             : []),
-        ].map((t) => line(t)),
+        ],
         width,
       ),
-    [title, width, themeNote],
+    [title, lines, tabs, width, themeNote],
   );
   const max = scrollMax(rows, height);
   useKeys((input, key) => {
     const to = movement(input, key, visibleRows(height));
     if (to) setOffset((o) => to(o, max));
   });
-  return (
-    <Viewport rows={rows} offset={offset} width={width} height={height} />
-  );
+  return <Viewport rows={rows} offset={offset} width={width} height={height} />;
 }

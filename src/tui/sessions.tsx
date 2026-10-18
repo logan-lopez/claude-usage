@@ -14,6 +14,7 @@ import { Row, SessionTable } from "./components.tsx";
 import { movement, useKeys } from "./keys.ts";
 import { tableBodyRows } from "./layout.ts";
 import type { ScreenModel } from "./screen.ts";
+import { COST_MARKS } from "./help.tsx";
 import type { Report } from "./useArchive.ts";
 
 export type Filters = {
@@ -49,6 +50,14 @@ type View = {
 const emptyView: View = { rows: [], costs: {}, total: 0, selection: 0, scroll: 0 };
 const selectedId = (v: View) => v.rows[v.selection - v.scroll]?.session_id;
 
+const HELP = [
+  "↑↓ or j/k choose a session, PageUp and PageDown move a page, Home and End jump to either end. Enter opens it.",
+  "/ searches session ids and names, ignoring case. f filters by project, model or activity. s sorts by last activity, tokens or requests.",
+  "While you type in search or a filter, keys are text. Enter applies, Esc cancels.",
+  "Filters choose which sessions are listed. Tokens and costs are always whole-session totals, not just the part inside a filter.",
+  ...COST_MARKS,
+];
+
 /** Sessions' model: paged browsing state, plus the editor overlays it owns. */
 export function useSessionsScreen({
   deps,
@@ -67,7 +76,7 @@ export function useSessionsScreen({
     title: "Sessions",
     hints:
       "↑↓ select · Enter open · / search · f filters · s sort · r reread · R fetch · ? help · q quit",
-    help: [],
+    help: HELP,
     reload: list.reload,
     overlay: editor !== null,
     closeOverlay: () => setEditor(null),

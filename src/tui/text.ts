@@ -25,24 +25,34 @@ export function fit(value: unknown, width: number, pad = false) {
   return `${out}…${pad ? " ".repeat(Math.max(0, width - kept - 1)) : ""}`;
 }
 
-/** Hard-wrap on grapheme boundaries; always returns at least one line. */
+/**
+ * Wrap at the last space that fits, or on a grapheme boundary when a word is wider than the line.
+ * The space a line breaks at is dropped. Always returns at least one line.
+ */
 export function wrap(value: string, width: number): string[] {
   const text = clean(value);
   if (stringWidth(text) <= width) return [text];
   const result: string[] = [];
-  let line = "";
+  let line: string[] = [];
   let used = 0;
   for (const { segment } of segments.segment(text)) {
     const n = stringWidth(segment);
-    if (used + n > width && line) {
-      result.push(line);
-      line = "";
+    if (used + n > width && line.length) {
+      const space = segment === " " ? line.length : line.lastIndexOf(" ");
+      const carry = space > 0 ? line.slice(space + 1) : [];
+      result.push((space > 0 ? line.slice(0, space) : line).join(""));
+      line = [];
       used = 0;
+      if (segment === " ") continue;
+      for (const s of carry) {
+        line.push(s);
+        used += stringWidth(s);
+      }
     }
-    line += segment;
+    line.push(segment);
     used += n;
   }
-  result.push(line);
+  if (line.length) result.push(line.join(""));
   return result;
 }
 

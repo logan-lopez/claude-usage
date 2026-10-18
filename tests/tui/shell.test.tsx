@@ -205,3 +205,29 @@ test("every model's reload runs after a data_version change, shown or not", asyn
   change();
   await until(() => calls.page > before.page && calls.detail > before.detail);
 });
+
+test("help shows the screen's own lines, then the shell's, with its own footer", async () => {
+  const { deps } = dependencies();
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  const screens = [
+    ["", "Overview · Recent sessions help", "highest reading in each hour"],
+    ["2", "Sessions help", "whole-session totals"],
+    ["\r", "Session Detail help", "Tools counts calls"],
+  ] as const;
+  for (const [key, heading, line] of screens) {
+    if (key) await app.key(key);
+    await app.key("?");
+    expect(app.frame()).toContain(heading);
+    expect(app.frame()).toContain(line);
+    expect(app.frame()).toContain("1 Overview · 2 Sessions switch screens");
+    expect(app.frame()).toContain("↑↓ scroll · Esc close · Ctrl+C quit");
+    expect(app.frame()).not.toContain("Enter apply");
+    await app.key("\u001b");
+    expect(app.frame()).not.toContain(heading);
+  }
+  // A Sessions editor keeps its own hint.
+  await app.key("\u001b");
+  await app.key("/");
+  expect(app.frame()).toContain("Enter apply · Esc close/cancel");
+});

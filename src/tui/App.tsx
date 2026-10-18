@@ -131,6 +131,8 @@ export function App({
   const content = help ? (
     <Help
       title={`${current.title}${current.context ? ` · ${current.context}` : ""}`}
+      lines={current.help}
+      tabs={TABS.map((t) => `${t.key} ${screens[t.id].title}`).join(" · ")}
       width={width}
       height={height}
       themeNote={themeNote}
@@ -172,9 +174,11 @@ export function App({
         )}
         <Row
           text={
-            help || current.overlay
-              ? "Enter apply · Esc close/cancel · Ctrl+C quit"
-              : current.hints
+            help
+              ? "↑↓ scroll · Esc close · Ctrl+C quit"
+              : current.overlay
+                ? "Enter apply · Esc close/cancel · Ctrl+C quit"
+                : current.hints
           }
           width={width}
           tone="muted"

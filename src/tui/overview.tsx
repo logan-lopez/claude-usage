@@ -17,6 +17,7 @@ import { age, isStale, num, spark } from "./text.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
 import { contentHeight, tableBodyRows, visibleRows } from "./layout.ts";
 import { tabKeys, type ScreenModel } from "./screen.ts";
+import { COST_MARKS } from "./help.tsx";
 
 const panels = [
   "Server limits",
@@ -43,6 +44,16 @@ const initialOverviewNav: OverviewNav = {
   offsets: panels.map(() => 0),
   recentId: undefined,
 };
+
+const HELP = [
+  "Tab and Shift+Tab move between the five panels. ↑↓ or j/k scroll the focused one, PageUp and PageDown by a page, Home and End to either end.",
+  "In Recent sessions, ↑↓ chooses a session and Enter opens it.",
+  "Server limits show each reading's source and age.",
+  "Archive runs the same checks as cusage doctor, minus the credential check: browsing never touches your credentials. The checks report what the archive shows, not whether the agents are healthy.",
+  "Meters show the highest reading in each hour, not the current one. · is an hour with no reading; gaps are left as gaps, never filled in.",
+  "Daily output is output tokens by UTC day, from your local archive. Days with none still show, and today is partial.",
+  ...COST_MARKS,
+];
 
 /** Full dashboard row budget below the two top panels; they take the rest. */
 const FULL = { meters: 9, daily: 7, recent: 8 };
@@ -169,7 +180,7 @@ export function useOverviewScreen({
     title: "Overview",
     context: panels[nav.panel],
     hints: `${tabKeys} tabs · Tab panel · ↑↓ scroll/select · Enter open · r reread · R fetch · ? help · q quit`,
-    help: [],
+    help: HELP,
     overlay: false,
     render: (frame) => (
       <Overview

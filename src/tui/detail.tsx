@@ -15,6 +15,7 @@ import { costLabel, num } from "./text.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
 import { visibleRows } from "./layout.ts";
 import type { ScreenModel } from "./screen.ts";
+import { COST_MARKS } from "./help.tsx";
 import type { Report } from "./useArchive.ts";
 
 export const sections = [
@@ -37,6 +38,15 @@ type DetailState = {
   offsets: Record<string, number>;
 };
 
+const HELP = [
+  "Tab and Shift+Tab change section. ← and → do too, except in Attribution, where they choose effort, agent, skill, MCP server or plugin.",
+  "↑↓ or j/k scroll, PageUp and PageDown by a page, Home and End to either end. Esc goes back to where you came from.",
+  "Amounts are whole-session totals.",
+  ...COST_MARKS,
+  "Requests with an unknown context tier, and rates that aren't known, are listed in the Summary.",
+  "Tools counts calls. It doesn't assign tokens or cost to tools.",
+];
+
 /**
  * Detail's model, pushed rather than tabbed. `open` loads a session and says whether Detail can
  * show it; the shell then pushes the screen, and `back` returns to where it came from.
@@ -55,7 +65,7 @@ export function useDetailScreen({
     title: "Session Detail",
     hints:
       "Tab section · ←→ attribution · ↑↓ scroll · Esc back · r reread · R fetch · ? help · q quit",
-    help: [],
+    help: HELP,
     reload: viewer.reload,
     overlay: false,
     open: viewer.open,
