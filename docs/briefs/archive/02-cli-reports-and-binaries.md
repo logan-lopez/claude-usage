@@ -1,6 +1,6 @@
 # `cusage` phases 3-4 - the rest of the CLI surface
 
-Successor to `BRIEFING-1.md`, which covered phases 1–2 and is done. That
+Successor to `BRIEFING-1.md` (now [`01-archiver-and-session-views.md`](01-archiver-and-session-views.md)), which covered phases 1–2 and is done. That
 document is a dated record; where this one contradicts it, this one wins, and
 the contradictions are called out explicitly rather than quietly corrected.
 

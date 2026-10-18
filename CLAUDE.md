@@ -11,6 +11,8 @@ Bun loads `.env` automatically; do not add `dotenv`.
 archive is the product; the reporting on top of it is replaceable. See
 `README.md` for the data sources and the deduplication rules.
 
+Handoff briefs are in `docs/briefs/`. Start with `README.md`; unscheduled ones are in `FUTURE.md`, and finished ones move to `archive/`. Logan's notes for this project are in his Obsidian folder, `~/Writing/Books/TheBond/Development/Projects/claude-usage/`.
+
 ## The constraints that must not be quietly removed
 
 These are here because each of them is exactly the kind of thing a reasonable

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Build a usable first TUI release with three screens: **Overview, Sessions, and Session Detail**. Follow the visual hierarchy and muted styling of `docs/cusage_tui_overview_120x40.html`, adapting the layout to terminal size.
+Build a usable first TUI release with three screens: **Overview, Sessions, and Session Detail**. Follow the visual hierarchy and muted styling of `docs/briefs/assets/03/cusage_tui_overview_120x40.html`, adapting the layout to terminal size.
 
 The primary workflow is: inspect current usage and archive health → find a session → inspect its tokens, costs, and attribution → return without losing browsing state.
 
@@ -128,4 +128,4 @@ Verification must include:
 - `bun test`, `bun run typecheck`, `make build`, `git diff --check`, and strict OKF validation.
 - PTY smoke tests of both source and compiled TUI for startup, resize, navigation, and terminal restoration.
 
-The handoff should include the briefing as `docs/BRIEFING-3.md`, updated usage documentation, and durable architectural decisions recorded through the repository’s OKF workflow. Preserve the supplied HTML and existing briefings. Building and validating are included; installing binaries or changing launch agents is deferred.
+The handoff should include the briefing as `docs/BRIEFING-3.md` (now `docs/briefs/archive/03-ink-tui-session-explorer.md`), updated usage documentation, and durable architectural decisions recorded through the repository’s OKF workflow. Preserve the supplied HTML and existing briefings. Building and validating are included; installing binaries or changing launch agents is deferred.

@@ -2,6 +2,8 @@
 
 > Powered by [OKF Agent Memory](https://github.com/okf-memory/okf-agent-memory) — Open Knowledge Format (OKF) v0.2 persistent project memory for AI agents.
 
+Handoff briefs are in `docs/briefs/`. Start with `README.md`; unscheduled ones are in `FUTURE.md`, and finished ones move to `archive/`. Logan's notes for this project are in his Obsidian folder, `~/Writing/Books/TheBond/Development/Projects/claude-usage/`.
+
 Welcome to the **claude-usage** repository. When working in this codebase, you must follow the memory conventions:
 
 <!-- BEGIN OKF AGENT MEMORY -->

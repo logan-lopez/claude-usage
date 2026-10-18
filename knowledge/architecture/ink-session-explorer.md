@@ -2,7 +2,7 @@
 type: Decision
 title: Ink session explorer browses read-only with identity-preserving state
 description: The separate Ink TUI consumes plain query data, preserves session identity across navigation and reloads, and confines guarded limit refreshes to cancellable short-lived writable connections.
-sources: ["docs/BRIEFING-3.md", "src/tui/", "src/query.ts", "tests/tui.test.tsx", "tools/tui-pty-smoke.py", "patches/string-width@8.2.2.patch"]
+sources: ["docs/briefs/archive/03-ink-tui-session-explorer.md", "src/tui/", "src/query.ts", "tests/tui.test.tsx", "tools/tui-pty-smoke.py", "patches/string-width@8.2.2.patch"]
 generated: { by: agent/codex, at: 2026-09-11T16:03:32Z }
 ---
 
@@ -30,7 +30,7 @@ Most per-keypress time went to string-width's /^\p{RGI_Emoji}$/v, which JavaScri
 
 A read-only SQLite handle cannot create a WAL archive's -wal/-shm files, so a copied or restored archive failed on first read. openArchive then falls back to a read-write handle with PRAGMA query_only=ON, which still never creates or migrates the file and refuses every write.
 
-Sources: docs/BRIEFING-3.md; src/tui/; src/query.ts; src/doctor.ts; src/limits.ts; src/oauth.ts; tools/build.ts; tests/tui.test.tsx; tools/tui-pty-smoke.py.
+Sources: docs/briefs/archive/03-ink-tui-session-explorer.md; src/tui/; src/query.ts; src/doctor.ts; src/limits.ts; src/oauth.ts; tools/build.ts; tests/tui.test.tsx; tools/tui-pty-smoke.py.
 
 # Related Concepts
 - [CLI reports preserve provenance and install as standalone binaries](cli-reports-and-binary-install.md): Retains the separate executable and plain-data reporting boundaries.

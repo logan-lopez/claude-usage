@@ -131,7 +131,7 @@ python3 tools/tui-pty-smoke.py /path/to/scrubbed-fixture.db
 ```
 
 Use a scrubbed fixture archive for this test, not a live archive. The full
-accepted scope is preserved in [BRIEFING-3](docs/BRIEFING-3.md). Installation and
+accepted scope is preserved in [brief 03](docs/briefs/archive/03-ink-tui-session-explorer.md). Installation and
 launch-agent changes are separate from building and validating the explorer.
 
 ## Where the data comes from
