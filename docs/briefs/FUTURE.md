@@ -17,6 +17,9 @@ only the first two and deferred the rest.
 
 Source: [brief 03](archive/03-ink-tui-session-explorer.md), Summary; root README, Status.
 
+Groundwork scheduled: [brief 05](05-tui-cleanup-pass.md) builds the screen model these tabs plug
+into. The tabs themselves are still unscheduled.
+
 ## Grouped session views in the TUI
 
 Sessions grouped by project, model or skill, as `cusage sessions --by` does on the CLI. Deferred by

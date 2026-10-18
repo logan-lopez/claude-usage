@@ -18,7 +18,8 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
   `docs/architecture/`, `docs/guide/`, a short root README and `AGENTS.md`, and OKF is gone.
 - Waiting on Logan: whether to regenerate the pricing calibration fixture, which predates
   `MEASURED_COST` (brief 04's report).
-- Next: the deferred TUI work in `FUTURE.md` needs a brief.
+- Next: brief 05, one cleanup pass on the TUI (a screen model for tabs, layout math, help per
+  screen, the test split, and the quirks found). The tabs in `FUTURE.md` build on it.
 
 ## Open
 
@@ -28,6 +29,9 @@ that belong to a plan go under its heading.
 4. [`04-move-knowledge-onto-layout.md`](04-move-knowledge-onto-layout.md) (done, awaiting review):
    architecture pages, the guide, a short root README and `AGENTS.md` replace the OKF bundle and
    the long `CLAUDE.md`.
+5. [`05-tui-cleanup-pass.md`](05-tui-cleanup-pass.md): the TUI's screen model (`TABS`, a reload
+   per screen), one layout rule for page sizes, help per screen, `tests/tui/` split by screen,
+   and thirteen visible quirks fixed.
 
 ## Done
 
@@ -60,6 +64,7 @@ Don't relitigate these. If one turns out to be wrong in practice, stop and say s
 | Stale numbers | Every limit carries its source and age; meters reconciled per meter by freshness; disagreements reported, never averaged | The first `renderLimits` printed a bold 53% with no age. (`CLAUDE.md`) |
 | Grouped cost | Exact or absent: straddling sessions counted, their cost excluded, column marked `+` | cost-state is per session; summing it into every group turned $90 into $226 on the fixture. (README, Known limits) |
 | Fixtures | Frozen, allowlist-scrubbed, committed; `BASELINE.json` from a second dedup in `tools/make-fixture.ts` | Expected numbers read from `src/ingest.ts` would only prove it agrees with itself. (`CLAUDE.md`) |
+| TUI screens | Each screen's hook returns a `ScreenModel`; `TABS` drives the tab bar and digit keys; the shell calls every `reload`; Detail is pushed, not a tab | Adding a tab was six edits in `App.tsx`. A new tab can't forget to reload. (Logan, 2026-10-18, brief 05) |
 | Content | Never ingested: tool names and token counts only; credentials read once, never stored | Privacy. (`CLAUDE.md`, README) |
 
 ## Not built
