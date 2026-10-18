@@ -74,7 +74,8 @@ light or dark palette.
   and dark is the default when the terminal doesn't answer.
 - `--no-color` or `NO_COLOR` skips the detection entirely and renders monochrome.
 - Body text stays in the terminal's own foreground.
-- The palette reaches components through context.
+- The palette reaches components through context. Monochrome is a palette too (`MONO`, every
+  tone undefined), so no component takes a `mono` prop.
 
 ## Rules worth keeping
 

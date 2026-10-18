@@ -30,6 +30,18 @@ export const palettes: Record<ThemeName, Palette> = {
   },
 };
 
+/**
+ * No colour at all: every tone is the terminal's own styling. Kept out of `palettes` because it has
+ * no background to be checked against.
+ */
+export const MONO: Palette = {
+  text: undefined,
+  muted: undefined,
+  accent: undefined,
+  warning: undefined,
+  ok: undefined,
+};
+
 /** Representative terminal backgrounds each palette is checked against: plain, tinted and grey. */
 export const BACKGROUNDS: Record<ThemeName, string[]> = {
   dark: ["#000000", "#1e1e1e", "#2b2b2b", "#282c34"],

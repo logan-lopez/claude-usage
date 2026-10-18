@@ -6,7 +6,7 @@ import { age, costLabel, fit, num, wrap } from "./text.ts";
 import { palettes, type Palette, type Tone } from "./theme.ts";
 
 export type { Tone };
-/** Set once by `App`; the default keeps components renderable on their own. */
+/** Set once by `App` (`MONO` for no colour); the default keeps components renderable on their own. */
 export const PaletteContext = createContext<Palette>(palettes.dark);
 export type Line = { text: string; tone?: Tone };
 export const line = (text: string, tone?: Tone): Line => ({ text, tone });
@@ -15,19 +15,17 @@ export const Row = memo(function Row({
   text,
   width,
   tone = "text",
-  mono = false,
   selected = false,
 }: {
   text: string;
   width: number;
   tone?: Tone;
-  mono?: boolean;
   selected?: boolean;
 }) {
   const palette = useContext(PaletteContext);
   return (
     <Text
-      color={mono ? undefined : palette[selected ? "accent" : tone]}
+      color={palette[selected ? "accent" : tone]}
       bold={selected}
       wrap="truncate-end"
     >
@@ -42,13 +40,11 @@ export function Section({
   height,
   focused,
   children,
-  mono,
 }: React.PropsWithChildren<{
   title: string;
   width: number;
   height: number;
   focused?: boolean;
-  mono: boolean;
 }>) {
   return (
     <Box
@@ -62,7 +58,6 @@ export function Section({
         text={`${focused ? "▸" : " "} ${title} ${"─".repeat(width)}`}
         width={width}
         tone={focused ? "accent" : "muted"}
-        mono={mono}
       />
       {children}
     </Box>
@@ -82,26 +77,23 @@ export function Viewport({
   offset,
   width,
   height,
-  mono,
 }: {
   rows: Line[];
   offset: number;
   width: number;
   height: number;
-  mono: boolean;
 }) {
   const visible = Math.max(1, height - 1);
   const start = Math.min(offset, scrollMax(rows, height));
   return (
     <Box flexDirection="column" height={height} overflow="hidden">
       {rows.slice(start, start + visible).map((l, i) => (
-        <Row key={i} text={l.text} tone={l.tone} width={width} mono={mono} />
+        <Row key={i} text={l.text} tone={l.tone} width={width} />
       ))}
       {rows.length > visible && (
         <Row
           text={`↑↓ ${start + 1}–${Math.min(rows.length, start + visible)} / ${rows.length}`}
           width={width}
-          mono={mono}
           tone="muted"
         />
       )}
@@ -114,12 +106,10 @@ export function BarChart({
   values,
   width,
   height,
-  mono,
 }: {
   values: number[];
   width: number;
   height: number;
-  mono: boolean;
 }) {
   const palette = useContext(PaletteContext);
   if (!values.length) return null;
@@ -138,10 +128,10 @@ export function BarChart({
     <Box flexDirection="column">
       {Array.from({ length: height }, (_, i) => (
         <Text key={i}>
-          <Text color={mono ? undefined : palette.muted}>
+          <Text color={palette.muted}>
             {history.map((v) => cell(v, i)).join("")}
           </Text>
-          <Text color={mono ? undefined : palette.accent}>{cell(today, i)}</Text>
+          <Text color={palette.accent}>{cell(today, i)}</Text>
         </Text>
       ))}
     </Box>
@@ -155,7 +145,6 @@ export function SessionTable({
   width,
   height,
   now,
-  mono,
 }: {
   rows: SessionRow[];
   costs: Record<string, CostRow>;
@@ -163,7 +152,6 @@ export function SessionTable({
   width: number;
   height: number;
   now: number;
-  mono: boolean;
 }) {
   const nameWidth = Math.max(13, width - 60);
   const cells = (
@@ -182,7 +170,6 @@ export function SessionTable({
         text={cells("Activity", "Name / project", "Models", "Reqs", "Tokens", "Cost")}
         width={width}
         tone="muted"
-        mono={mono}
       />
       {rows.map((r) => (
         <Row
@@ -197,7 +184,6 @@ export function SessionTable({
             selected === r.session_id ? "▸" : " ",
           )}
           width={width}
-          mono={mono}
           selected={selected === r.session_id}
         />
       ))}

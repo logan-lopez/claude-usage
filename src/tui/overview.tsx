@@ -164,7 +164,6 @@ export function Overview({
   height,
   nav,
   setNav,
-  mono,
   onOpen,
 }: {
   data: OverviewData;
@@ -174,7 +173,6 @@ export function Overview({
   height: number;
   nav: OverviewNav;
   setNav: React.Dispatch<React.SetStateAction<OverviewNav>>;
-  mono: boolean;
   onOpen: (id: string | undefined) => void;
 }) {
   const full = width >= FULL_MIN_WIDTH && height >= FULL_MIN_HEIGHT;
@@ -253,7 +251,6 @@ export function Overview({
         width={w}
         height={h}
         focused={index === nav.panel}
-        mono={mono}
       >
         {rows ? (
           <Viewport
@@ -261,26 +258,22 @@ export function Overview({
             offset={nav.offsets[index]!}
             width={w}
             height={h - 1}
-            mono={mono}
           />
         ) : index === DAILY ? (
           <>
             <Row
               text="Archived local usage · 30 UTC calendar days · today partial"
               width={w}
-              mono={mono}
               tone="muted"
             />
             <BarChart
               values={data.daily.map((d) => d.output_tokens)}
               width={w}
               height={Math.max(1, Math.min(5, h - 4))}
-              mono={mono}
             />
             <Row
               text={`${new Date(data.daily[0]!.tsMs).toISOString().slice(0, 10)} → today (partial): ${num(data.daily.at(-1)!.output_tokens)} output tokens`}
               width={w}
-              mono={mono}
               tone="muted"
             />
           </>
@@ -292,13 +285,11 @@ export function Overview({
             width={w}
             height={h - 1}
             now={now}
-            mono={mono}
           />
         ) : (
           <Row
             text="Archive is empty. Run cusage sync to archive requests."
             width={w}
-            mono={mono}
           />
         )}
       </Section>
@@ -311,7 +302,6 @@ export function Overview({
         <Row
           text={`Panel ${nav.panel + 1}/${panels.length}: ${panels[nav.panel]} · Tab / Shift+Tab to switch`}
           width={width}
-          mono={mono}
           tone="accent"
         />
         {panel(nav.panel)}

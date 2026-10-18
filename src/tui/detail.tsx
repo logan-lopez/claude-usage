@@ -84,13 +84,11 @@ export function DetailScreen({
   detail,
   width,
   height,
-  mono,
   onBack,
 }: {
   detail: Detail;
   width: number;
   height: number;
-  mono: boolean;
   onBack: () => void;
 }) {
   const state = detail.state!;
@@ -138,13 +136,11 @@ export function DetailScreen({
       <Row
         text={`Session: ${s?.slug ?? s?.session_id ?? "unavailable"} / ${s?.project ?? "—"}`}
         width={width}
-        mono={mono}
         tone="accent"
       />
       <Row
         text={`${num(s?.requests ?? 0)} requests · ${num(s?.total_tokens ?? 0)} tokens · ${costLabel(cost)} whole-session`}
         width={width}
-        mono={mono}
       />
       <Row
         text={
@@ -152,7 +148,6 @@ export function DetailScreen({
           (section === ATTRIBUTION ? ` · ${dimensions[dimension]}` : "")
         }
         width={width}
-        mono={mono}
         tone="muted"
       />
       <Viewport
@@ -160,7 +155,6 @@ export function DetailScreen({
         offset={state.offsets[key] ?? 0}
         width={width}
         height={viewportHeight}
-        mono={mono}
       />
     </Box>
   );

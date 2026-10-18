@@ -153,7 +153,6 @@ export function SessionsScreen({
   height,
   pageHeight,
   now,
-  mono,
   onOpen,
   onOverlay,
 }: {
@@ -163,7 +162,6 @@ export function SessionsScreen({
   height: number;
   pageHeight: number;
   now: number;
-  mono: boolean;
   onOpen: (id: string | undefined) => void;
   onOverlay: (overlay: SessionOverlay) => void;
 }) {
@@ -181,18 +179,15 @@ export function SessionsScreen({
       <Row
         text={`Search: ${filters.search || "—"} · project: ${filters.project || "All"} · model: ${filters.model || "All"}`}
         width={width}
-        mono={mono}
       />
       <Row
         text={`${filters.activity} · sort ${filters.sort} ↓ · Filters select sessions; whole-session totals.`}
         width={width}
-        mono={mono}
         tone="muted"
       />
       <Row
         text={`${view.total} matching · ${view.total ? view.scroll + 1 : 0}–${Math.min(view.total, view.scroll + view.rows.length)} visible`}
         width={width}
-        mono={mono}
         tone="muted"
       />
       {view.total ? (
@@ -203,7 +198,6 @@ export function SessionsScreen({
           width={width}
           height={height - 3}
           now={now}
-          mono={mono}
         />
       ) : (
         <Row
@@ -213,7 +207,6 @@ export function SessionsScreen({
               : "No matching sessions. f clears filters."
           }
           width={width}
-          mono={mono}
         />
       )}
     </Box>
@@ -228,14 +221,12 @@ export function SessionOverlayView({
   overlay,
   filters,
   width,
-  mono,
   onApply,
   onOverlay,
 }: {
   overlay: SessionOverlay;
   filters: Filters;
   width: number;
-  mono: boolean;
   onApply: (next: Filters) => void;
   onOverlay: (overlay: SessionOverlay) => void;
 }) {
@@ -245,7 +236,6 @@ export function SessionOverlayView({
         <Row
           text={`${overlay}: ${overlay === "search" ? "session ID or name" : "case-insensitive contains"} · Enter applies · Esc cancels`}
           width={width}
-          mono={mono}
         />
         <TextInput
           key={overlay}
@@ -260,7 +250,6 @@ export function SessionOverlayView({
         <Row
           text="Filters choose sessions; amounts remain whole-session totals."
           width={width}
-          mono={mono}
         />
         <Select
           options={options(["Project", "Model", "Activity", "Clear all"])}

@@ -25,13 +25,11 @@ export function Help({
   title,
   width,
   height,
-  mono,
   themeNote,
 }: {
   title: string;
   width: number;
   height: number;
-  mono: boolean;
   themeNote?: string;
 }) {
   const [offset, setOffset] = useState(0);
@@ -55,6 +53,6 @@ export function Help({
     if (to) setOffset((o) => to(o, max));
   });
   return (
-    <Viewport rows={rows} offset={offset} width={width} height={height} mono={mono} />
+    <Viewport rows={rows} offset={offset} width={width} height={height} />
   );
 }

@@ -5,7 +5,7 @@ import { Spinner, ThemeProvider, defaultTheme, extendTheme } from "@inkjs/ui";
 import type { LimitReading } from "../query.ts";
 import type { OverviewData, TuiDependencies } from "./data.ts";
 import { PaletteContext, Row } from "./components.tsx";
-import { palettes, type Palette, type ThemeName } from "./theme.ts";
+import { MONO, palettes, type Palette, type ThemeName } from "./theme.ts";
 import { age, isStale, num } from "./text.ts";
 import { useArchive } from "./useArchive.ts";
 import { Overview, initialOverviewNav, panels } from "./overview.tsx";
@@ -27,27 +27,27 @@ const CHROME_ROWS = 6;
 const MIN_COLUMNS = 80;
 const MIN_ROWS = 24;
 
-/** `null` is monochrome: no colour overrides, so the terminal's own styling applies. */
-const theme = (palette: Palette | null) =>
+/** `MONO` has no colour overrides, so the terminal's own styling applies. */
+const theme = (palette: Palette) =>
   extendTheme(defaultTheme, {
     components: {
       Select: {
         styles: {
-          focusIndicator: () => ({ color: palette?.accent }),
-          selectedIndicator: () => ({ color: palette?.ok }),
+          focusIndicator: () => ({ color: palette.accent }),
+          selectedIndicator: () => ({ color: palette.ok }),
           label: ({ isFocused, isSelected }: { isFocused: boolean; isSelected: boolean }) => ({
             color: isFocused
-              ? palette?.accent
+              ? palette.accent
               : isSelected
-                ? palette?.ok
-                : palette?.text,
+                ? palette.ok
+                : palette.text,
             bold: isFocused,
           }),
         },
       },
     },
   });
-const themes = { dark: theme(palettes.dark), light: theme(palettes.light), mono: theme(null) };
+const themes = { dark: theme(palettes.dark), light: theme(palettes.light), mono: theme(MONO) };
 
 const HINTS: Record<Screen, string> = {
   overview:
@@ -79,6 +79,7 @@ export function App({
   const undersized = width < MIN_COLUMNS || rows < MIN_ROWS;
   const height = Math.max(1, rows - CHROME_ROWS);
   const pageHeight = Math.max(1, height - 5);
+  const palette = mono ? MONO : palettes[themeName];
   const { exit } = useApp();
   const [screen, setScreen] = useState<Screen>("overview");
   const [origin, setOrigin] = useState<"overview" | "sessions">("overview");
@@ -127,13 +128,14 @@ export function App({
 
   if (undersized)
     return (
-      <Box width={width} height={rows} flexDirection="column">
-        <Row
-          text={`Resize to at least ${MIN_COLUMNS}×${MIN_ROWS}. q / Ctrl+C quit.`}
-          width={width}
-          mono={mono}
-        />
-      </Box>
+      <PaletteContext.Provider value={palette}>
+        <Box width={width} height={rows} flexDirection="column">
+          <Row
+            text={`Resize to at least ${MIN_COLUMNS}×${MIN_ROWS}. q / Ctrl+C quit.`}
+            width={width}
+          />
+        </Box>
+      </PaletteContext.Provider>
     );
 
   let content: React.ReactNode;
@@ -149,7 +151,6 @@ export function App({
         }
         width={width}
         height={height}
-        mono={mono}
         themeNote={themeNote}
       />
     );
@@ -159,7 +160,6 @@ export function App({
         overlay={overlay}
         filters={sessions.filters}
         width={width}
-        mono={mono}
         onOverlay={setOverlay}
         onApply={(next) => {
           sessions.apply(next);
@@ -169,7 +169,7 @@ export function App({
     );
   else if (!data)
     content = archive.error ? (
-      <Row text={archive.error} width={width} mono={mono} tone="warning" />
+      <Row text={archive.error} width={width} tone="warning" />
     ) : (
       <Spinner label="Reading archive…" />
     );
@@ -183,7 +183,6 @@ export function App({
         height={height}
         nav={overviewNav}
         setNav={setOverviewNav}
-        mono={mono}
         onOpen={open}
       />
     );
@@ -196,7 +195,6 @@ export function App({
         height={height}
         pageHeight={pageHeight}
         now={now}
-        mono={mono}
         onOpen={open}
         onOverlay={setOverlay}
       />
@@ -207,19 +205,17 @@ export function App({
         detail={detail}
         width={width}
         height={height}
-        mono={mono}
         onBack={() => setScreen(origin)}
       />
     );
 
   return (
-    <PaletteContext.Provider value={palettes[themeName]}>
+    <PaletteContext.Provider value={palette}>
       <Box width={width} height={rows} flexDirection="column" overflow="hidden">
-        <Header data={data} now={now} width={width} mono={mono} />
+        <Header data={data} now={now} width={width} />
         <Row
           text={`${screen === "overview" ? "▸" : " "} 1 Overview    ${screen === "sessions" ? "▸" : " "} 2 Sessions${screen === "detail" ? "    ▸ Session Detail" : ""}`}
           width={width}
-          mono={mono}
           tone="accent"
         />
         <Box height={height} flexShrink={0} flexDirection="column" overflow="hidden">
@@ -237,14 +233,12 @@ export function App({
               "Archive browser · ~ estimate · + partial · ? explains provenance"
             }
             width={width}
-            mono={mono}
             tone={archive.error ? "warning" : "muted"}
           />
         )}
         <Row
           text={overlay ? "Enter apply · Esc close/cancel · Ctrl+C quit" : HINTS[screen]}
           width={width}
-          mono={mono}
           tone="muted"
         />
       </Box>
@@ -257,12 +251,10 @@ function Header({
   data,
   now,
   width,
-  mono,
 }: {
   data: OverviewData | null;
   now: number;
   width: number;
-  mono: boolean;
 }) {
   const binding = data?.limits?.binding;
   const stale = binding ? isStale(binding.tsMs, now) : false;
@@ -279,13 +271,11 @@ function Header({
             : "Binding limit unavailable"
         }`}
         width={width}
-        mono={mono}
         tone={stale ? "warning" : "text"}
       />
       <Row
         text={`5h ${meter(data?.limits?.fiveHour)} · 7d ${meter(data?.limits?.sevenDay)} · ${num(data?.inventory.totals.total_tokens ?? 0)} tokens · ${num(data?.inventory.sessions ?? 0)} sessions`}
         width={width}
-        mono={mono}
         tone="muted"
       />
     </>
