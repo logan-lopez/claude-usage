@@ -334,3 +334,164 @@ background:
 
 Then stop. Report every quirk fixed, including any found beyond this list, with its commit. Ask
 Logan before merging anything.
+
+## Report
+
+All seven steps done in one session, on branch `brief-05-tui-cleanup`, one commit per step, then
+one fix from a review pass (`eb66c74`). Nothing is merged.
+
+### Built
+
+- **Tests** (`tests/tui/`, step 1, `5b08af5`). `tests/tui.test.tsx` is split into
+  `helpers.tsx`, `data.test.ts`, `shell.test.tsx`, `overview.test.tsx`, `sessions.test.tsx`,
+  `detail.test.tsx` and `string-width.test.ts`, by slicing the original by line range, so no body
+  was retyped. All 139 passed after the move. The three references to the string-width test now
+  name `tests/tui/string-width.test.ts`.
+- **Monochrome in context** (step 2, `f873128`). `theme.ts` has `MONO`, outside `palettes`. `App`
+  provides `mono ? MONO : palettes[theme]`, and no component or screen takes `mono`.
+- **Layout** (`src/tui/layout.ts`, step 3, `8c2582f`). `MIN_COLUMNS`, `MIN_ROWS`, `CHROME_ROWS`,
+  `contentHeight`, `visibleRows` and `tableBodyRows`. Every `movement()` page comes from the
+  viewport it scrolls. Overview's `FULL_MIN_HEIGHT` is `contentHeight(36)`, so full mode still
+  starts at 36 rows.
+- **Screen model** (`src/tui/screen.ts`, step 4, `d168896`). The pinned `ScreenModel`, `Frame`
+  and `TABS`, plus `TabId`, `ScreenId` and `tabKeys`. `useOverviewScreen` owns `nav`,
+  `useSessionsScreen` owns the editors (search, filters, project, model, activity, sort), and
+  `useDetailScreen` returns `open(id)` beside its model. `App` calls `useArchive`, then
+  `useDetailScreen`, `useOverviewScreen` and `useSessionsScreen`, and derives the tab bar, digit
+  keys, hints, help and the reload loop from the record and `TABS`.
+- **Help per screen** (step 5, `d26f858`). Each model's `help` is written in the guide's voice;
+  `help.tsx` adds the shell's lines and the theme note. `COST_MARKS` is shared by the three
+  screens that show costs.
+- **Quirks and tidies** (step 6, `71118a9`), listed below.
+- **Docs and install** (step 7, `f5f0a9b`).
+- **Review.** A subagent reviewed the branch diff for correctness. It found one real defect,
+  fixed in `eb66c74` (below), and one low-impact one, left as a follow-up.
+
+### Quirks fixed
+
+| # | Quirk | Commit |
+| --- | --- | --- |
+| 1 | Page sizes match their viewports: each Overview panel, Sessions' table body, Detail, Help | `8c2582f` |
+| 2 | Sessions fetches its table's body rows, so the last row isn't blank | `8c2582f` |
+| 3 | `num(999_999)` is `1.0M` | `71118a9` |
+| 4 | `spark` rounds, as the CLI does; a test compares it with the CLI's real `sparkline` | `71118a9` |
+| 5 | A small nonzero day gets the bottom block; zero days keep `─` | `71118a9` |
+| 6 | Notices clear ten seconds after they appear; errors still clear only on a successful read | `71118a9` |
+| 7 | `Refresh guarded; retry in 3m` | `71118a9` |
+| 8 | Help's footer is `↑↓ scroll · Esc close · Ctrl+C quit`; editors keep `Enter apply` | `d26f858` |
+| 9 | The header says `Reading archive…` until the first read lands | `71118a9` |
+| 10 | A session that's gone loses Detail's totals row | `71118a9` |
+| 11 | Summary uses plain labels, `fmtDuration` and `fmtWhen` | `71118a9` |
+| 12 | Activity and Sort selects have a heading row | `71118a9` |
+| 13 | Overview's hint follows the focused panel: Enter only in Recent sessions, no ↑↓ in Daily output | `71118a9` |
+
+Found on the way:
+
+| Quirk | Commit |
+| --- | --- |
+| `wrap` broke prose mid-word ("sess/ions"). It now breaks at the last space that fits, and hard-breaks only a word wider than the line | `d26f858` |
+| A blank `line("")` renders no row in Ink, so a separator vanished; Help uses `" "` | `d26f858` |
+| Detail kept only `session: null` once a session disappeared, so its reload lost the id: the session couldn't come back on a later reread, and the header said "unavailable". State now keeps `id` | `71118a9` |
+| API blocks, Overview's reset times and its archive span printed raw ISO. They use `fmtWhen`, as the CLI does for the same fields | `71118a9` |
+| In monochrome, the undersize notice rendered outside the palette provider and picked up dark colours | `f873128` |
+| Overview's key handler read its render's `nav`, so ↓ then Enter in one stdin chunk opened the *previous* session, and Tab then ↓ moved the old panel. It now reads the last committed nav from a ref. Predates this pass; found in review | `eb66c74` |
+| A key in the same chunk as a screen switch reached the old screen's handler. The shell now clears `keys.current` when it switches screen or opens help, so the key is dropped | `eb66c74` |
+
+### Deviations
+
+- **Branch.** The brief names none and LAYOUT.md's default is the checked-out branch (`main`).
+  The brief expects a branch it can ask about merging, so I made `brief-05-tui-cleanup`.
+- **The brief's own files.** `05-tui-cleanup-pass.md` (untracked) and its lines in `README.md`
+  and `FUTURE.md` were uncommitted when I started. I committed them as they were, separately, as
+  `e282692`, so that the report and retag could follow them without mixing my changes into yours.
+- **`App` still names Detail once.** `open` calls `setScreen("detail")` after `detail.open(id)`
+  succeeds. That is the push itself; the alternative is a push callback threaded into every
+  screen hook. Apart from that, `App` names screens only in its three hook calls and the record,
+  and its initial screen is `TABS[0].id`.
+- **`useDetail`'s methods** are `section(delta)`, `dimension(delta)` and `scroll(to, max)`.
+  `dimension` changes the section outside Attribution, because ←→ do.
+- **A `tests/tui/text.test.ts`** that the brief's table doesn't list. It holds the `wrap`, `num`
+  and sparkline tests, which belong to `text.ts`, not to a screen.
+- **`DAY` stays in `data.ts`**, since `readOverview` uses it; `sessions.tsx` imports it.
+- **The loading header** says `Archive not read yet` rather than `Reading archive…` when the
+  first read has failed, since the read is no longer in progress. The error itself shows in the
+  content area and status line, as before.
+- **Acceptance grep names.** The forbidden-name grep runs over all of `src/tui`, so the screen
+  modules' locals aren't called `sessions` or `detail` (`list`, `viewer`), and Overview's hint
+  table is `PANEL_KEYS`.
+- **Test bodies changed** only where behaviour did: three tests matched `session_id:`, now `ID:`.
+
+### Defaults taken
+
+- **Notice expiry:** ten seconds after it appears, on the existing one-second clock (`NOTICE_MS`).
+- **`CHROME_ROWS`' spare row: removed.** The PTY smoke passes without it at 120×40 and 80×24, as
+  the default requires. The smoke only checks for strings, though, so the reason I'm confident is
+  structural: the shell's outer `Box` was already the terminal's height, so the spare row was a
+  blank row inside it. It never changed Ink's write path (`outputHeight >= rows` in both cases).
+  Every screen gains one content row.
+
+### Acceptance
+
+- `bun test`: 157 pass, 0 fail (was 139), and `tests/tui.test.tsx` no longer exists.
+- `bun run typecheck`: clean.
+- `rg -n "mono" src/tui`: only `App.tsx` (its prop, the palette pick and `themes.mono`).
+- `rg -n "SessionOverlay|sessions\.reload|detail\.reload|HINTS|height - 5" src/tui`: nothing.
+- `rg -n "tui\.test\.tsx" AGENTS.md docs …`: nothing.
+- `make build`, then `python3 tools/tui-pty-smoke.py <db>`: PASS for `bun src/tui.ts` and
+  `dist/cusage-tui`, against an archive built from `fixtures/projects` in the session scratchpad.
+- `make install`, then `cusage doctor`: `build ok`, binary and repo HEAD both the final commit
+  (reinstalled after the report commit).
+- New tests: the tab bar and digit keys from `TABS`; every `reload` after a `data_version`
+  change, with Detail and Sessions off screen; PageDown in a small Overview panel (full and
+  compact); the Sessions table at 80×24; Detail's page; `num`; sparkline parity; the bar floor;
+  notice expiry with the guarded wording; Help's footer and per-screen lines; the loading
+  header; the select headings; Overview's hint; Summary units; a session that disappears and
+  returns; `wrap`; the archive span; keys in one chunk on Overview. The three paging and
+  blank-row tests fail against the step-2 source, and the chunk test fails without its fix.
+
+### Size
+
+Sized L, this session M (19 active min, 19 wall, 0 compactions).
+
+### Spot checks for Logan
+
+In kitty with the installed `cusage-tui`, on a light and a dark background:
+
+- PageDown and PageUp in each Overview panel at 120×40, and in compact mode at 80×24.
+- The Sessions table fills to the bottom row. Every screen now uses the terminal's last row too
+  (the spare row is gone): check nothing scrolls or flickers at the bottom, in Zellij as well.
+- `?` on each screen shows that screen's help, and reads plainly.
+- Notices clear by themselves (`r` gives one).
+- Detail's Summary reads in hours and minutes.
+- Search, filters and sort still behave as they did. Esc cancels, and `q` typed into search is
+  text.
+
+### Docs updated
+
+- `docs/architecture/tui.md`: the file table (`screen.ts`, `layout.ts`, the screen modules,
+  `help.tsx`, `data.ts`'s cache), a Screens section, Browsing state around the screen model, the
+  paging rule under Layout, notice expiry, monochrome as a palette, the new "Adding a tab is
+  three edits" rule, and the string-width test path.
+- `docs/guide/explorer.md`: help per screen and hints that follow the panel, notices that clear,
+  and Summary in readable units. The keys table is unchanged.
+- `AGENTS.md` and this README's decisions table: the string-width test path.
+
+### Follow-ups
+
+- Detail's Summary still has the old jargon in two lines it prints ("Measured and estimated
+  subtotals are never combined. ~ estimated; + partial known-rate amount.", and the
+  unknown-tier warning). Help now explains the marks plainly; the in-screen lines could match.
+- The status line's default ("Archive browser · ~ estimate · + partial · ? explains provenance")
+  says `?` explains provenance; help now does, per screen, but the wording could be plainer.
+- `fmtWhen` times carry no zone marker in the explorer, as in most of the CLI. They're UTC.
+  The CLI adds " UTC" in a few places; the explorer could do the same.
+- Detail's chunked keys (from review, low impact): `detail.scroll(to, max)` passes the render's
+  `max`, so Tab then ↓ in one chunk clamps the new section's offset to the old section's `max`.
+  The viewport clamps what's shown, so the ↓ can be lost, nothing worse. Fixing it means
+  computing the new section's rows inside the update.
+- Sessions' editors and chunks: a paste like `/foo` opens search, but the rest of the chunk still
+  reaches the Sessions handler until the next commit, so its `f` opens Filters. The shell's
+  clear-on-switch doesn't cover an editor the screen opens itself.
+- Detail's `reload` runs after every archive change even when Detail isn't showing (one
+  `getSession` and one cost query), because the shell calls every `reload`. Cheap, but a screen
+  that's expensive to reload would want to know whether it's visible.

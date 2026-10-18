@@ -29,7 +29,7 @@ that belong to a plan go under its heading.
 4. [`04-move-knowledge-onto-layout.md`](04-move-knowledge-onto-layout.md) (done, awaiting review):
    architecture pages, the guide, a short root README and `AGENTS.md` replace the OKF bundle and
    the long `CLAUDE.md`.
-5. [`05-tui-cleanup-pass.md`](05-tui-cleanup-pass.md) (in progress): the TUI's screen model (`TABS`, a reload
+5. [`05-tui-cleanup-pass.md`](05-tui-cleanup-pass.md) (done, awaiting review): the TUI's screen model (`TABS`, a reload
    per screen), one layout rule for page sizes, help per screen, `tests/tui/` split by screen,
    and thirteen visible quirks fixed.
 
