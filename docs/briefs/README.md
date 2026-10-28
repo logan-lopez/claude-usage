@@ -13,7 +13,7 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
 - Since 5A: the TUI split into modules with the keypress-latency fix (#4), a light or dark palette
   picked from the terminal background, and fallback-priced cost-state totals no longer counted as
   measured.
-- The installed binaries in `~/.local/bin` are current at `177065c` (`cusage doctor`: build ok).
+- The installed binaries in `~/.local/bin` are current at `0566329` (`cusage doctor`: build ok).
 - Brief 04 is done, awaiting review and a commit. Project knowledge now lives in
   `docs/architecture/`, `docs/guide/`, a short root README and `AGENTS.md`, and OKF is gone.
 - Waiting on Logan: whether to regenerate the pricing calibration fixture, which predates
@@ -21,7 +21,10 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
 - Brief 05, the TUI cleanup pass, is done, awaiting review.
 - Brief 06, groundwork for new tabs (reload only what's shown, fast tool attribution, drill-down
   from Overview's Daily output), is done, awaiting review.
-- Next: brief 07, the Breakdown tab. Timeline and Limits are in `FUTURE.md`.
+- Brief 07, the Breakdown tab (tab 3, any dimension over a window, drilling to its sessions), is
+  done, awaiting review. Its report asks whether `+` on nearly every live project and model row
+  reads clearly.
+- Next: Timeline or Limits needs a brief; both are in `FUTURE.md`.
 
 ## Open
 
@@ -36,7 +39,7 @@ that belong to a plan go under its heading.
    and thirteen visible quirks fixed.
 6. [`06-tui-tab-groundwork.md`](06-tui-tab-groundwork.md) (done, awaiting review): the shell reloads only the screen
    that's showing, `attribution --by tool` gets fast, and drill-down from Overview's Daily output.
-7. [`07-tui-breakdown-tab.md`](07-tui-breakdown-tab.md) (in progress): tab 3, tokens and exact-or-absent cost by
+7. [`07-tui-breakdown-tab.md`](07-tui-breakdown-tab.md) (done, awaiting review): tab 3, tokens and exact-or-absent cost by
    any dimension over a window, with Enter drilling to the group's sessions.
 
 ## Done
@@ -73,6 +76,7 @@ Don't relitigate these. If one turns out to be wrong in practice, stop and say s
 | TUI screens | Each screen's hook returns a `ScreenModel`; `TABS` drives the tab bar and digit keys; the shell reloads the screen that's showing and marks the rest stale, reloading a stale one before it's shown; Detail and drilled Sessions are pushed, not tabs | Adding a tab was six edits in `App.tsx`. A new tab can't forget to reload. Reloading every screen ran hidden tabs' queries on every change, up to 2.6 s of synchronous SQLite. (Logan, 2026-10-18, brief 05; reload changed 2026-10-28, brief 06) |
 | TUI grouping | A Breakdown tab with drill-down, not a grouping toggle on Sessions; Sessions stays flat | Regrouping while keeping selection and filters was the hard part of the toggle, and drilling answers the same question. (Logan, 2026-10-28, brief 07) |
 | Tool attribution | Grouped in JavaScript over two flat scans (requests summed per message, then `tool_calls`), not in SQL; the old SQL is the parity oracle in `tests/reports.test.ts` | 2.6 s in SQL's `DISTINCT` and correlated `EXISTS`, about 490 ms in its best `GROUP BY` shape, about 200 ms this way on 93K requests. ([CLI page](../architecture/cli.md), brief 06) |
+| Grouped cost read | `groupSessions` reads each (session, group) pair with its lifetime counts and measured cost in one statement; the old per-session loop is the parity oracle in `tests/query.test.ts` | Three queries per session took about 330 ms for project over 30 days on 93K requests, over Breakdown's 300 ms line; one statement takes about 230 ms, identical on the live archive. ([Cost page](../architecture/cost.md), brief 07) |
 | Content | Never ingested: tool names and token counts only; credentials read once, never stored | Privacy. (`CLAUDE.md`, README) |
 
 ## Not built
