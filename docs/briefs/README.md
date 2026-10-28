@@ -6,7 +6,7 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
 
 ## Where things stand
 
-*Updated 2026-10-17.*
+*Updated 2026-10-28.*
 
 - Phases 1–5A are built: the archiver and both launchd agents, the full CLI report surface, and
   the Ink TUI (Overview, Sessions, Session Detail).
@@ -18,8 +18,10 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
   `docs/architecture/`, `docs/guide/`, a short root README and `AGENTS.md`, and OKF is gone.
 - Waiting on Logan: whether to regenerate the pricing calibration fixture, which predates
   `MEASURED_COST` (brief 04's report).
-- Next: brief 05, one cleanup pass on the TUI (a screen model for tabs, layout math, help per
-  screen, the test split, and the quirks found). The tabs in `FUTURE.md` build on it.
+- Brief 05, the TUI cleanup pass, is done, awaiting review.
+- Next: brief 06, groundwork for new tabs (reload only what's shown, fast tool attribution,
+  drill-down from Overview's Daily output), then brief 07, the Breakdown tab. Timeline and Limits
+  are in `FUTURE.md`.
 
 ## Open
 
@@ -32,6 +34,10 @@ that belong to a plan go under its heading.
 5. [`05-tui-cleanup-pass.md`](05-tui-cleanup-pass.md) (done, awaiting review): the TUI's screen model (`TABS`, a reload
    per screen), one layout rule for page sizes, help per screen, `tests/tui/` split by screen,
    and thirteen visible quirks fixed.
+6. [`06-tui-tab-groundwork.md`](06-tui-tab-groundwork.md) (in progress): the shell reloads only the screen
+   that's showing, `attribution --by tool` gets fast, and drill-down from Overview's Daily output.
+7. [`07-tui-breakdown-tab.md`](07-tui-breakdown-tab.md): tab 3, tokens and exact-or-absent cost by
+   any dimension over a window, with Enter drilling to the group's sessions.
 
 ## Done
 
@@ -64,7 +70,8 @@ Don't relitigate these. If one turns out to be wrong in practice, stop and say s
 | Stale numbers | Every limit carries its source and age; meters reconciled per meter by freshness; disagreements reported, never averaged | The first `renderLimits` printed a bold 53% with no age. (`CLAUDE.md`) |
 | Grouped cost | Exact or absent: straddling sessions counted, their cost excluded, column marked `+` | cost-state is per session; summing it into every group turned $90 into $226 on the fixture. (README, Known limits) |
 | Fixtures | Frozen, allowlist-scrubbed, committed; `BASELINE.json` from a second dedup in `tools/make-fixture.ts` | Expected numbers read from `src/ingest.ts` would only prove it agrees with itself. (`CLAUDE.md`) |
-| TUI screens | Each screen's hook returns a `ScreenModel`; `TABS` drives the tab bar and digit keys; the shell calls every `reload`; Detail is pushed, not a tab | Adding a tab was six edits in `App.tsx`. A new tab can't forget to reload. (Logan, 2026-10-18, brief 05) |
+| TUI screens | Each screen's hook returns a `ScreenModel`; `TABS` drives the tab bar and digit keys; the shell reloads the screen that's showing and marks the rest stale, reloading a stale one before it's shown; Detail and drilled Sessions are pushed, not tabs | Adding a tab was six edits in `App.tsx`. A new tab can't forget to reload. Reloading every screen ran hidden tabs' queries on every change, up to 2.6 s of synchronous SQLite. (Logan, 2026-10-18, brief 05; reload changed 2026-10-28, brief 06) |
+| TUI grouping | A Breakdown tab with drill-down, not a grouping toggle on Sessions; Sessions stays flat | Regrouping while keeping selection and filters was the hard part of the toggle, and drilling answers the same question. (Logan, 2026-10-28, brief 07) |
 | Content | Never ingested: tool names and token counts only; credentials read once, never stored | Privacy. (`CLAUDE.md`, README) |
 
 ## Not built
@@ -76,8 +83,10 @@ What's deliberately absent, so nobody flags it as missing. Point at `FUTURE.md` 
 - `cusage pricing --refresh`.
 - claude.ai and Desktop chat usage: it isn't on disk. The seven-day meter can't be derived from
   local data (r=0.04 against local tokens).
-- TUI tabs beyond Overview and Sessions, grouped session views, mouse support and the command
-  prompt: see [`FUTURE.md`](FUTURE.md).
+- TUI tabs beyond Overview, Sessions and Breakdown (Timeline and Limits), and mouse support: see
+  [`FUTURE.md`](FUTURE.md).
+- A Cost, Doctor or Cache tab, a TUI command prompt, and sorting Sessions by cost: parked in
+  [`FUTURE.md`](FUTURE.md#parked), each with why.
 
 ## Future direction new work must not block
 
