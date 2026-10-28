@@ -33,7 +33,8 @@ API, how it's trending, and how close a limit is. `cusage-tui` browses the same 
 - [Plots it over time](docs/guide/over-time.md): daily to monthly totals, observed five-hour
   cycles, and cache ratios.
 - [Feeds scripts](docs/guide/scripting.md): JSON, CSV and a streaming export.
-- [Browses it](docs/guide/explorer.md) in a terminal explorer.
+- [Browses it](docs/guide/explorer.md) in a terminal explorer, from a day's output down to its
+  sessions.
 - [Says what it can't tell you](docs/guide/trusting-the-numbers.md).
 
 ## Requirements
