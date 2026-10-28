@@ -65,6 +65,15 @@ def smoke(command):
         drain(b'Sessions \xc2\xb7 project')
         os.write(master, b'\x1b')
         drain(b'project \xc2\xb7 all time')
+        # Limits: needs five-hour samples within the last 7 days of the clock it runs on.
+        os.write(master, b'5')
+        drain(b'History \xc2\xb7 72 hours')
+        os.write(master, b'l')
+        drain(b'History \xc2\xb7 7 days')
+        os.write(master, b'\r')
+        drain(b'Sessions \xc2\xb7 five-hour cycle')
+        os.write(master, b'\x1b')
+        drain(b'History \xc2\xb7 7 days')
         os.write(master, b'1')
         drain(b'Recent sessions')
         resize(80, 24)
@@ -85,7 +94,7 @@ def smoke(command):
         assert b'\x1b[?25h' in captured, 'cursor was not restored'
         restored = termios.tcgetattr(slave)
         assert restored == original, 'terminal mode was not restored'
-        print(f'PASS {command[0]}: startup, navigation, breakdown drill, resize, quit, alternate screen, cursor, termios')
+        print(f'PASS {command[0]}: startup, navigation, breakdown, limits drill, resize, quit, alternate screen, cursor, termios')
     finally:
         if proc.poll() is None:
             proc.kill()

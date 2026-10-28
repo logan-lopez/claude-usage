@@ -12,6 +12,7 @@ import { useOverviewScreen } from "./overview.tsx";
 import { useSessionsScreen } from "./sessions.tsx";
 import { useDetailScreen } from "./detail.tsx";
 import { useBreakdownScreen } from "./breakdown.tsx";
+import { useLimitsScreen } from "./limits.tsx";
 import { Help } from "./help.tsx";
 import { KeyTarget, type KeyHandler } from "./keys.ts";
 import { MIN_COLUMNS, MIN_ROWS, contentHeight } from "./layout.ts";
@@ -107,7 +108,8 @@ export function App({
   const sessions = useSessionsScreen({ deps, report, height, open });
   const drilled = useSessionsScreen({ deps, report, height, open, drilled: true });
   const breakdown = useBreakdownScreen({ deps, report, height, drill });
-  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, breakdown, drill: drilled, detail };
+  const limits = useLimitsScreen({ deps, report, height, width, drill });
+  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, breakdown, limits, drill: drilled, detail };
   models.current = screens;
   const current = screens[screen];
 
@@ -176,14 +178,20 @@ export function App({
   ) : (
     current.render({ width, height, now, data, diagnostics: archive.diagnostics })
   );
-  const tabs = TABS.map((t) => `${t.id === screen ? "▸" : " "} ${t.key} ${screens[t.id].title}`);
-  if (stack.length > 1) tabs.push(`▸ ${stack.slice(1).map((id) => screens[id].title).join(" › ")}`);
+  const tabBar = (short: boolean) => {
+    const tabs = TABS.map((t) =>
+      `${t.id === screen ? "▸" : " "} ${t.key}${short && t.id !== stack[0] ? "" : ` ${screens[t.id].title}`}`);
+    if (stack.length > 1) tabs.push(`▸ ${stack.slice(1).map((id) => screens[id].title).join(" › ")}`);
+    return tabs.join("    ");
+  };
+  // Five tabs and a drilled title don't fit 80 columns: the other tabs shrink to their digit.
+  const tabs = tabBar(false).length > width ? tabBar(true) : tabBar(false);
 
   return (
     <PaletteContext.Provider value={palette}>
       <Box width={width} height={rows} flexDirection="column" overflow="hidden">
         <Header data={data} failed={!!archive.error} now={now} width={width} />
-        <Row text={tabs.join("    ")} width={width} tone="accent" />
+        <Row text={tabs} width={width} tone="accent" />
         <Box height={height} flexShrink={0} flexDirection="column" overflow="hidden">
           <KeyTarget.Provider value={keys}>
             <ThemeProvider theme={mono ? themes.mono : themes[themeName]}>{content}</ThemeProvider>

@@ -183,7 +183,7 @@ test("the tab bar and digit keys come from TABS", async () => {
   }
   // A digit with no tab does nothing.
   const before = app.frame();
-  await app.key(String(TABS.length + 1));
+  await app.key("123456789".split("").find((d) => !TABS.some((t) => t.key === d))!);
   expect(app.frame()).toBe(before);
 });
 
@@ -256,7 +256,7 @@ test("help shows the screen's own lines, then the shell's, with its own footer",
     await app.key("?");
     expect(app.frame()).toContain(heading);
     expect(app.frame()).toContain(line);
-    expect(app.frame()).toContain("1 Overview · 2 Sessions · 3 Breakdown switch screens");
+    expect(app.frame()).toContain("1 Overview · 2 Sessions · 3 Breakdown · 5 Limits switch screens");
     expect(app.frame()).toContain("↑↓ scroll · Esc close · Ctrl+C quit");
     expect(app.frame()).not.toContain("Enter apply");
     await app.key("\u001b");

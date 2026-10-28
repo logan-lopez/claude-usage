@@ -14,7 +14,8 @@ import {
   wrapLines,
   type Line,
 } from "./components.tsx";
-import { age, isStale, num, spark } from "./text.ts";
+import { age, num } from "./text.ts";
+import { limitsLines, meterLines } from "./readings.ts";
 import { fmtWhen } from "../time.ts";
 import { cycle, movement, useKeys } from "./keys.ts";
 import { contentHeight, tableBodyRows, visibleRows } from "./layout.ts";
@@ -78,51 +79,6 @@ const FULL_MIN_WIDTH = 110;
 /** Content height at a 36-row terminal. */
 const FULL_MIN_HEIGHT = contentHeight(36);
 
-export function limitsLines(data: OverviewData, now: number): Line[] {
-  const limits = data.limits;
-  if (!limits)
-    return [line("Limits unavailable. R fetches; r rereads archive.", "warning")];
-  const staleMark = (ts: number) => (isStale(ts, now) ? " · STALE" : "");
-  const reading = (name: string, r: typeof limits.fiveHour) =>
-    r
-      ? [
-          line(
-            `${name} ${r.percent ?? "—"}% · ${r.source} · ${age(r.tsMs, now)}${staleMark(r.tsMs)}`,
-            isStale(r.tsMs, now) ? "warning" : "text",
-          ),
-          line(`  resets ${r.resetsAt ? fmtWhen(r.resetsAt) : "unknown"}`, "muted"),
-        ]
-      : [line(`${name} unavailable`, "warning")];
-  return [
-    ...limits.scoped.flatMap((s) => [
-      line(
-        `${s.is_active ? "▸ binding" : " "} ${s.kind} ${s.scope_model || "all"} ${s.percent ?? "—"}% · ${s.severity ?? "unknown severity"}`,
-        s.is_active ? "accent" : "text",
-      ),
-      line(
-        `  ${s.source} · ${age(s.tsMs, now)}${staleMark(s.tsMs)} · reset ${s.resets_at ? fmtWhen(s.resets_at) : "unknown"}`,
-        isStale(s.tsMs, now) ? "warning" : "muted",
-      ),
-    ]),
-    ...reading("five_hour", limits.fiveHour),
-    ...reading("seven_day", limits.sevenDay),
-    ...limits.disagreements
-      .filter((d) => !isStale(d.chosen.tsMs, now) && !isStale(d.other.tsMs, now))
-      .map((d) =>
-        line(
-          `! disagreement ${d.metric}: ${d.chosen.source} ${d.chosen.percent}% vs ${d.other.source} ${d.other.percent}% (${d.deltaPoints} points)`,
-          "warning",
-        ),
-      ),
-    ...limits.sources.map((s) =>
-      line(
-        `${s.source}: ${age(s.tsMs, now)}${s.reconcilable ? "" : " · not reconciled"}`,
-        "muted",
-      ),
-    ),
-  ];
-}
-
 function archiveLines(
   data: OverviewData,
   diagnostics: Diagnostics | null,
@@ -151,38 +107,6 @@ function archiveLines(
         c.level === "ok" ? "ok" : "warning",
       ),
     ) ?? []),
-  ];
-}
-
-/** Compact mode puts each sparkline under its label; the full dashboard fits both on one row. */
-function meterLines(data: OverviewData, compact: boolean): Line[] {
-  const h = data.history;
-  const sources = h.sources.map((s) => s.source).join(" + ");
-  const series = [
-    ["seven_day", "sevenDayPct"],
-    ["five_hour", "fiveHourPct"],
-    [`${h.scopedModel ?? "no model"} scoped`, "scopedPct"],
-  ] as const;
-  const peak = (key: (typeof series)[number][1]) =>
-    h.peaks[key] === null ? "—" : `${h.peaks[key]}%`;
-  return [
-    line(
-      compact
-        ? `72 hourly peak buckets · ${sources || "no samples"}${h.sources.length > 1 ? " (mixed sources)" : ""}`
-        : `${sources || "No samples"}${h.sources.length > 1 ? " · mixed-source history" : ""}`,
-      "muted",
-    ),
-    ...series.flatMap(([label, key]) => {
-      const bars = spark(h.buckets.map((b) => b[key]));
-      return compact
-        ? [line(`${label}  peak ${peak(key)}`), line(bars)]
-        : [line(`${label}: ${bars} peak ${peak(key)}`)];
-    }),
-    line(
-      `Scoped sources: ${h.scopedSources.map((s) => s.source).join(" + ") || "none"}`,
-      "muted",
-    ),
-    line("· no sample; gaps never bridged. Historical peaks ≠ current readings.", "muted"),
   ];
 }
 
@@ -263,12 +187,12 @@ function Overview({
           ? [width - half, top]
           : [width, [FULL.meters, FULL.daily, FULL.recent][panel - METERS]!];
 
-  const limits = useMemo(() => limitsLines(data, now), [data, now]);
+  const limits = useMemo(() => limitsLines(data.limits, now), [data, now]);
   const archive = useMemo(
     () => archiveLines(data, diagnostics, now),
     [data, diagnostics, now],
   );
-  const meters = useMemo(() => meterLines(data, !full), [data, full]);
+  const meters = useMemo(() => meterLines(data.history, !full), [data, full]);
   const scrollable: Partial<Record<number, Line[]>> = useMemo(
     () => ({
       [LIMITS]: wrapLines(limits, size(LIMITS)[0]),
