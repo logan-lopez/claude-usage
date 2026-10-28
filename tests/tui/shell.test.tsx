@@ -249,20 +249,21 @@ test("help shows the screen's own lines, then the shell's, with its own footer",
     ["", "Overview · Recent sessions help", "highest reading in each hour"],
     ["2", "Sessions help", "whole-session totals"],
     ["\r", "Session Detail help", "Tools counts calls"],
+    ["3", "Breakdown · project help", "Tool rows overlap"],
   ] as const;
   for (const [key, heading, line] of screens) {
     if (key) await app.key(key);
     await app.key("?");
     expect(app.frame()).toContain(heading);
     expect(app.frame()).toContain(line);
-    expect(app.frame()).toContain("1 Overview · 2 Sessions switch screens");
+    expect(app.frame()).toContain("1 Overview · 2 Sessions · 3 Breakdown switch screens");
     expect(app.frame()).toContain("↑↓ scroll · Esc close · Ctrl+C quit");
     expect(app.frame()).not.toContain("Enter apply");
     await app.key("\u001b");
     expect(app.frame()).not.toContain(heading);
   }
   // A Sessions editor keeps its own hint.
-  await app.key("\u001b");
+  await app.key("2");
   await app.key("/");
   expect(app.frame()).toContain("Enter apply · Esc close/cancel");
 });

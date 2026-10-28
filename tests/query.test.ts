@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import type { Database } from "bun:sqlite";
 import {
-  archiveStats, cost, estimatorAudit, getSession, groupSessions, listSessions, resolveSessionId, sessionCosts,
+  archiveStats, cost, estimatorAudit, exactSessionCost, getSession, groupSessions, listSessions, MEASURED_COST,
+  resolveSessionId, sessionCosts, type GroupRow, type SessionsOptions,
 } from "../src/query.ts";
 import { baseline, freshDb, unknownModelCostDb } from "./helpers.ts";
 
@@ -83,6 +85,73 @@ test("grouped token totals partition the corpus exactly", () => {
       .toBe(`${by}:${baseline.tokens.total_tokens}`);
     expect(`${by}:${rows.reduce((a, r) => a + r.requests, 0)}`)
       .toBe(`${by}:${baseline.requests}`);
+  }
+});
+
+/** `groupSessions` as it was before brief 07, three queries per session, kept as the parity oracle. */
+function groupOracle(db: Database, by: NonNullable<SessionsOptions["by"]>, opts: SessionsOptions = {}): GroupRow[] {
+  const column = { project: "project", model: "model", entrypoint: "entrypoint", branch: "git_branch" }[by];
+  const w = {
+    sql: `($since IS NULL OR ts_ms >= $since) AND ($until IS NULL OR ts_ms < $until)
+      AND ($project IS NULL OR instr(lower(COALESCE(project,'')), lower($project)) > 0)
+      AND ($model IS NULL OR instr(lower(COALESCE(model,'')), lower($model)) > 0)`,
+    params: { $since: opts.since ?? null, $until: opts.until ?? null,
+      $project: opts.project ?? null, $model: opts.model ?? null },
+  };
+  const totals = db.query(`SELECT COALESCE(${column}, '(unknown)') key, COUNT(DISTINCT session_id) sessions,
+    COUNT(*) AS requests, COALESCE(SUM(input_tokens), 0) AS input_tokens, COALESCE(SUM(output_tokens), 0) AS output_tokens,
+    COALESCE(SUM(thinking_tokens), 0) AS thinking_tokens, COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
+    COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens, COALESCE(SUM(ephemeral_5m), 0) AS ephemeral_5m,
+    COALESCE(SUM(ephemeral_1h), 0) AS ephemeral_1h, COALESCE(SUM(total_tokens), 0) AS total_tokens
+    FROM requests WHERE ${w.sql} GROUP BY ${column} ORDER BY total_tokens DESC`).all(w.params) as GroupRow[];
+  const memberships = db.query(`SELECT DISTINCT session_id, COALESCE(${column}, '(unknown)') key FROM requests WHERE ${w.sql}`).all(w.params) as { session_id: string; key: string }[];
+  const costs = new Map<string, ReturnType<typeof exactSessionCost>>();
+  for (const id of new Set(memberships.map(r => r.session_id))) {
+    const all = db.query(`SELECT COUNT(*) n, COUNT(DISTINCT COALESCE(${column}, '(unknown)')) groups FROM requests WHERE session_id=$id`).get({ $id: id }) as { n: number; groups: number };
+    const selected = db.query(`SELECT COUNT(*) n FROM requests WHERE session_id=$id AND ${w.sql}`).get({ ...w.params, $id: id }) as { n: number };
+    const cost = db.query(`SELECT ${MEASURED_COST} AS total_cost_usd FROM sessions WHERE session_id=?`).get(id) as { total_cost_usd: number | null } | null;
+    costs.set(id, exactSessionCost(cost?.total_cost_usd ?? null, all.groups, all.n === selected.n));
+  }
+  return totals.map(t => {
+    const parts = memberships.filter(r => r.key === t.key).map(r => costs.get(r.session_id)!);
+    return { ...t, cost_usd: parts.reduce((n, r) => n + r.cost_usd, 0),
+      sessions_split: parts.reduce((n, r) => n + r.sessions_split, 0),
+      sessions_unpriced: parts.reduce((n, r) => n + r.sessions_unpriced, 0), cost_complete: parts.every(r => r.cost_complete) };
+  });
+}
+
+test("groupSessions matches the pre-brief-07 per-session loop for every grouping and filter", () => {
+  const db = freshDb();
+  const mid = 1788450000000;
+  // Inside one session, so that session is partly selected: its cost has to drop out.
+  const inside = (db.query(`SELECT ts_ms FROM requests WHERE session_id =
+    (SELECT session_id FROM requests GROUP BY session_id HAVING COUNT(*) > 2 ORDER BY session_id LIMIT 1)
+    ORDER BY ts_ms LIMIT 1 OFFSET 1`).get() as { ts_ms: number }).ts_ms;
+  const cases: SessionsOptions[] = [
+    {}, { since: mid }, { until: mid }, { since: inside }, { project: "proj-06" }, { model: "opus" },
+    { since: 1788200000000, until: 1788700000000, project: "PROJ-1", model: "fable" },
+  ];
+  for (const by of ["project", "model", "entrypoint", "branch"] as const) {
+    const all = groupSessions(db, by);
+    for (const opts of cases) {
+      const rows = groupSessions(db, by, opts);
+      const oracle = groupOracle(db, by, opts);
+      expect(rows).toEqual(oracle);
+      // `--json` prints the rows as they are, so their key order is output too.
+      expect(JSON.stringify(rows)).toBe(JSON.stringify(oracle));
+      // Each filter has to bite, or parity under it proves nothing.
+      if (Object.keys(opts).length) expect(rows).not.toEqual(all);
+    }
+    // A partly selected session's cost is excluded, or that path goes untested.
+    expect(groupSessions(db, by, { since: inside }).some((r) => r.sessions_split > 0 && !r.cost_complete)).toBe(true);
+  }
+  // The flagged-cost archive: a NULL measured cost reaches the oracle and the rewrite alike.
+  const flagged = unknownModelCostDb();
+  try {
+    for (const by of ["project", "model", "entrypoint", "branch"] as const)
+      expect(groupSessions(flagged, by)).toEqual(groupOracle(flagged, by));
+  } finally {
+    flagged.close();
   }
 });
 

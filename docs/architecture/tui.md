@@ -1,7 +1,8 @@
 # The explorer (TUI)
 
 `cusage-tui` is a separate Ink executable that browses the archive read-only through `query.ts`,
-with Overview and Sessions tabs, and a drilled Sessions list and Session Detail pushed over them.
+with Overview, Sessions and Breakdown tabs, and a drilled Sessions list and Session Detail pushed
+over them.
 
 **Sources:** `src/tui.ts`, `src/tui/`, `patches/`
 
@@ -14,7 +15,7 @@ with Overview and Sessions tabs, and a drilled Sessions list and Session Detail 
 | `src/tui/screen.ts` | The screen contract: `ScreenModel`, `Frame`, `TABS` and `ScreenId` |
 | `src/tui/useArchive.ts` | The archive lifecycle |
 | `src/tui/data.ts` | Opening the archive, the query-backed dependencies the screens read through, and the session page cache, which never evicts and is replaced on every filter change or reload |
-| `src/tui/overview.tsx`, `sessions.tsx`, `detail.tsx` | Each exports a hook returning its screen's `ScreenModel`, and renders that screen and owns its keys |
+| `src/tui/overview.tsx`, `sessions.tsx`, `breakdown.tsx`, `detail.tsx` | Each exports a hook returning its screen's `ScreenModel`, and renders that screen and owns its keys |
 | `src/tui/help.tsx` | The help overlay the shell draws over any screen |
 | `src/tui/keys.ts` | Key routing (`useKeys`) and `movement()` |
 | `src/tui/layout.ts` | The row budget: minimum size, chrome rows, and how a viewport's height becomes a page |
@@ -42,10 +43,10 @@ only on a successful read.
   `r`, not on every poll.
 
 **Screens.** Each screen module exports a hook (`useOverviewScreen`, `useSessionsScreen`,
-`useDetailScreen`) that returns a `ScreenModel` (`src/tui/screen.ts`) every render: its title and
+`useBreakdownScreen`, `useDetailScreen`) that returns a `ScreenModel` (`src/tui/screen.ts`) every render: its title and
 help context, footer hints, help lines, an optional `reload`, whether its own overlay owns the
 keyboard, and a `render(frame)`. `App` calls the hooks in a fixed order (Detail, Overview, the
-Sessions tab, the drilled Sessions) and builds a `Record<ScreenId, ScreenModel>`. From it, and from
+Sessions tab, the drilled Sessions, Breakdown) and builds a `Record<ScreenId, ScreenModel>`. From it, and from
 `TABS`, it derives the tab bar, the digit keys, the footer hints, the help heading and lines, and
 the reload loop.
 
@@ -70,7 +71,8 @@ through `report` and pushes nothing.
   `drill(scope, label)`, which lists the sessions in a `SessionScope` (`query.ts`) with no filters.
   Its title is `Sessions · <label>`. Search, filters and sort apply on top of the scope, and
   clearing them keeps it. Opening a drill never changes the Sessions tab's filters or selection.
-- Overview's Daily output is the first caller: Enter drills into the chosen UTC day.
+- Overview's Daily output drills into the chosen UTC day, and Breakdown into a group over its
+  window.
 - Sessions owns its editors (search, filters, project, model, activity, sort). It renders the
   editor in place of the table while `overlay` is true; the shell only calls `closeOverlay` on
   Esc.
@@ -106,6 +108,23 @@ with the CLI's rate and provenance logic.
 - A drill's `SessionScope` is different: a session is in it when one request matches both the
   `[since, until)` range and the exact key, on the request's own column (through `tool_calls` for
   a tool). That's what a group row of `attribution(by, { since, until })` counted.
+
+**Breakdown.** One table of groups for a dimension over a window, through one dependency,
+`breakdown(by, { since })` (`readBreakdown` in `data.ts`). Project, model, entrypoint and branch
+come from `sessionGroupsReport`, with sessions and exact-or-absent measured cost; the other seven
+from `attribution`, with no cost, and calls for tool. Both run in one read transaction.
+
+- The windows are 30 days, 7 days and all time, back from now, as Sessions' activity filter counts
+  them. The view keeps the `since` it read with, so a drill scopes the same requests.
+- Share is of the window's total tokens: the grouped rows' sum, since they partition the window,
+  or `corpusTotals` for an attribution dimension, whose rows leave out unattributed requests and,
+  for tool, overlap.
+- Each dimension keeps its selection, by group key, and its scroll. Reads are cached by dimension
+  and window until the next `reload`, so ←→ back to a dimension doesn't requery.
+- Enter drills with `{ since, by, key }`; `by` is the dimension's own name, and a grouped
+  `'(unknown)'` row drills with `key: null`.
+- Every dimension reads in under 300 ms at 30 days or all time on 93K requests (2026-10-28).
+  Project, the slowest, takes about 250–285 ms.
 
 **Limits on Overview.** Scoped history filters the exact selected model before hourly peak
 aggregation: the binding `weekly_scoped` model first, otherwise the latest archived one.

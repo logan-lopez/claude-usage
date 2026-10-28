@@ -35,9 +35,10 @@ export type Frame = {
 export const TABS = [
   { id: "overview", key: "1" },
   { id: "sessions", key: "2" },
+  { id: "breakdown", key: "3" },
 ] as const;
 export type TabId = (typeof TABS)[number]["id"];
 export type ScreenId = TabId | "drill" | "detail";
 
-/** The digit keys, for a hint: `1/2`. */
+/** The digit keys, for a hint: `1/2/3`. */
 export const tabKeys = TABS.map((t) => t.key).join("/");

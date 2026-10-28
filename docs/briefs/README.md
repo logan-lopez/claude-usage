@@ -36,7 +36,7 @@ that belong to a plan go under its heading.
    and thirteen visible quirks fixed.
 6. [`06-tui-tab-groundwork.md`](06-tui-tab-groundwork.md) (done, awaiting review): the shell reloads only the screen
    that's showing, `attribution --by tool` gets fast, and drill-down from Overview's Daily output.
-7. [`07-tui-breakdown-tab.md`](07-tui-breakdown-tab.md): tab 3, tokens and exact-or-absent cost by
+7. [`07-tui-breakdown-tab.md`](07-tui-breakdown-tab.md) (in progress): tab 3, tokens and exact-or-absent cost by
    any dimension over a window, with Enter drilling to the group's sessions.
 
 ## Done

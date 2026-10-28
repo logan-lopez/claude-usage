@@ -47,6 +47,11 @@ Split or partly selected sessions still contribute requests. Their cost is exclu
 `sessions_split` (a whole session with no measured cost counts in `sessions_unpriced`),
 `cost_complete` is false, and the renderer marks the column `+`.
 
+`groupSessions` reads every (session, group) pair in the selection in one statement, with the
+session's lifetime request and group counts, how many of its requests the filters kept, and its
+`MEASURED_COST`. Three queries per session took about 330 ms on 93K requests; this takes about
+230. `tests/query.test.ts` keeps the old loop as a parity oracle.
+
 **The price table.** `pricing-snapshot.json` was transcribed from the approved phase 3–4 briefing, with
 rates dated 2026-06-24. Its `fetched_at` is `null`, because transcription isn't a fetch.
 `tools/refresh-pricing.ts` downloads the pricing documentation to

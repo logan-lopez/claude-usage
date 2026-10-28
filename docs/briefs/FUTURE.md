@@ -17,9 +17,9 @@ it. Cost, Doctor and Cache are under [Parked](#parked).
   `drill(scope, label)`.
 - **Kill criteria:** a tab that adds nothing over its CLI table plus the Overview panels.
 
-Scheduled: [brief 06](06-tui-tab-groundwork.md) (reload only what's shown, fast tool attribution,
-drill-down) and [brief 07](07-tui-breakdown-tab.md) (Breakdown). Timeline and Limits are still
-unscheduled.
+Built: [brief 06](06-tui-tab-groundwork.md) (reload only what's shown, fast tool attribution,
+drill-down) and [brief 07](07-tui-breakdown-tab.md), Breakdown as tab 3. Timeline and Limits are
+still unscheduled.
 
 ### Timeline
 
@@ -56,24 +56,6 @@ during it.
 - **Size:** M.
 - **Kill criteria:** you'd never leave the explorer on this tab rather than Overview. If so, a
   cycles panel on Overview gets most of it for S.
-
-## Grouped session views in the TUI
-
-Sessions grouped by project, model or skill, as `cusage sessions --by` does on the CLI. Deferred by
-brief 03.
-
-- **Why:** "where did the tokens go" is a grouping question, and the Sessions screen is flat.
-- **Likely shape:** a grouping toggle on the Sessions screen that keeps selection and filters
-  across regrouping.
-- **Must keep:** grouped cost is exact or absent. Straddling sessions are counted, their cost
-  excluded and marked, never summed into each group.
-- **Kill criteria:** filters on the flat list answer the same questions.
-
-Source: [brief 03](archive/03-ink-tui-session-explorer.md), Summary; root README, Status.
-
-Replaced by [brief 07](07-tui-breakdown-tab.md)'s Breakdown tab, which groups by any dimension and
-drills to the sessions, leaving Sessions flat (Logan, 2026-10-28). Remove this section when 07
-lands.
 
 ## TUI mouse support and command prompt
 

@@ -1,10 +1,10 @@
 # The explorer
 
 `cusage-tui` is a full-screen terminal browser for the archive: an Overview of limits and
-activity, a searchable list of sessions, the sessions behind one day's output, and each session in
-detail.
+activity, a searchable list of sessions, where the tokens went by project, skill, tool or any other
+dimension, the sessions behind a day or a group, and each session in detail.
 
-**Covers:** [TUI](../architecture/tui.md)
+**Covers:** [TUI](../architecture/tui.md), [Cost](../architecture/cost.md)
 
 ## Starting it
 
@@ -45,6 +45,32 @@ archive is reread, even across midnight. Enter lists that day's sessions.
 
 The amounts are always whole-session totals, even when an activity filter is on.
 
+**3 Breakdown** is one table of groups for a dimension over a window: where the tokens went.
+
+- ← and → (or `h` and `l`) change the dimension: project, model, skill, agent, MCP server,
+  plugin, tool, effort, entrypoint, branch and Claude Code version.
+- `w` changes the window: the last 30 days (where it starts), the last 7 days, or all time.
+- Each group shows its requests, total and output tokens, and its share of the window's tokens.
+  Above the table, the coverage line says how many of the window's requests have a value for the
+  dimension at all.
+- Project, model, entrypoint and branch also show sessions and cost. A session's cost counts
+  toward a group only when the whole session is in that group and inside the window. A trailing
+  `+` means some of the group's sessions were left out of the amount: they span more than one
+  group, reach outside the window, or have no cost record. Expect it on most rows: one chat often
+  touches several models, or several projects through worktrees. The amount is Claude Code's own
+  record, never an estimate.
+- The other dimensions have no cost column. A skill or tool has no cost record of its own.
+- Tool rows overlap: a request that used several tools counts under each, so the rows add up past
+  the total, and a tool's tokens are the context it ran in, not what it consumed. Tool also shows
+  how many calls it made.
+- Each dimension remembers which group you were on, so going back to it with ← → finds the same
+  row.
+
+Enter on a group lists **a group's sessions**: every session with at least one request in that
+group and window, with whole-session totals. The tab bar names it, as in
+`▸ Sessions · skill superpowers:writing-plans · last 30 days`. It works like a day's sessions,
+below, and Esc comes back to the same group.
+
 **A day's sessions** opens over Overview when you press Enter on a day in Daily output. The tab
 bar shows it as `▸ Sessions · 2026-10-21 UTC`. It lists every session with at least one request
 that UTC day, including ones that started earlier or went on after midnight, with whole-session
@@ -62,21 +88,22 @@ durations in hours and minutes and times in UTC, to the minute. Tool sections co
 don't assign tokens to tools. Esc goes back to where you were, with the same selection and
 filters.
 
-The tab bar shows where you are: the two tabs, then whatever you opened over them, such as
-`▸ Sessions · 2026-10-21 UTC › Session Detail`. Esc steps back one, and `1` or `2` goes straight
-to that tab from anywhere.
+The tab bar shows where you are: the three tabs, then whatever you opened over them, such as
+`▸ Sessions · 2026-10-21 UTC › Session Detail`. Esc steps back one, and `1`, `2` or `3` goes
+straight to that tab from anywhere.
 
 ## Keys
 
 | Key | Action |
 | --- | --- |
-| `1`, `2` | Overview, Sessions, from anywhere |
+| `1`, `2`, `3` | Overview, Sessions, Breakdown, from anywhere |
 | Tab, Shift+Tab | Next or previous panel, or Detail section |
 | arrows, `j`/`k`, PageUp/PageDown, Home/End | Move or scroll |
-| Enter | Open a session; in Daily output, list the chosen day's sessions |
+| Enter | Open a session; in Daily output, list the chosen day's sessions; in Breakdown, the group's |
 | Esc | Go back one step, or cancel |
 | `/`, `f`, `s` | Search, filters, sort (Sessions) |
-| left, right | Choose a day in Daily output (or `h`/`l`); the attribution dimension in Detail; in other Detail sections, change section |
+| left, right | Choose a day in Daily output (or `h`/`l`); the dimension in Breakdown (or `h`/`l`); the attribution dimension in Detail; in other Detail sections, change section |
+| `w` | Change Breakdown's window |
 | `r` | Reread the archive and rerun the health checks |
 | `R` | Fetch fresh limits |
 | `?` | Help: keys, marks and the theme in use |

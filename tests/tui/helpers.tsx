@@ -3,7 +3,7 @@ import React from "react";
 import { render, cleanup } from "ink-testing-library";
 import { freshDb } from "../helpers.ts";
 import { App } from "../../src/tui/App.tsx";
-import { readOverview, type TuiDependencies } from "../../src/tui/data.ts";
+import { readBreakdown, readOverview, type TuiDependencies } from "../../src/tui/data.ts";
 import { sessionPage, sessionCosts, getSession } from "../../src/query.ts";
 import type { RefreshOutcome } from "../../src/limits.ts";
 
@@ -29,7 +29,7 @@ export function teardown() {
 export function dependencies() {
   const db = freshDb();
   closers.push(() => db.close());
-  const counts = { overview: 0, diagnostics: 0, refresh: 0, version: 0 };
+  const counts = { overview: 0, diagnostics: 0, refresh: 0, version: 0, breakdown: 0 };
   let version = 1;
   let now = NOW;
   const deps: TuiDependencies = {
@@ -41,6 +41,10 @@ export function dependencies() {
     page: (opts) => sessionPage(db, opts),
     costs: (ids) => sessionCosts(db, ids),
     detail: (id) => getSession(db, id),
+    breakdown: (by, opts) => {
+      counts.breakdown++;
+      return readBreakdown(db, by, opts);
+    },
     version: () => {
       counts.version++;
       return version;

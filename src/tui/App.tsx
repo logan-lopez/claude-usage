@@ -11,6 +11,7 @@ import { useArchive } from "./useArchive.ts";
 import { useOverviewScreen } from "./overview.tsx";
 import { useSessionsScreen } from "./sessions.tsx";
 import { useDetailScreen } from "./detail.tsx";
+import { useBreakdownScreen } from "./breakdown.tsx";
 import { Help } from "./help.tsx";
 import { KeyTarget, type KeyHandler } from "./keys.ts";
 import { MIN_COLUMNS, MIN_ROWS, contentHeight } from "./layout.ts";
@@ -105,7 +106,8 @@ export function App({
   const overview = useOverviewScreen({ open, drill, now });
   const sessions = useSessionsScreen({ deps, report, height, open });
   const drilled = useSessionsScreen({ deps, report, height, open, drilled: true });
-  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, drill: drilled, detail };
+  const breakdown = useBreakdownScreen({ deps, report, height, drill });
+  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, breakdown, drill: drilled, detail };
   models.current = screens;
   const current = screens[screen];
 

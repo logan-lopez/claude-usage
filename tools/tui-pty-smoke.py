@@ -56,6 +56,15 @@ def smoke(command):
         drain(b'Session Detail')
         os.write(master, b'\x1b')
         drain(b'matching')
+        os.write(master, b'3')
+        drain(b'last 30 days')
+        # The fixture may be older than 30 days; all time always has its groups.
+        os.write(master, b'ww')
+        drain(b'all time')
+        os.write(master, b'\r')
+        drain(b'Sessions \xc2\xb7 project')
+        os.write(master, b'\x1b')
+        drain(b'project \xc2\xb7 all time')
         os.write(master, b'1')
         drain(b'Recent sessions')
         resize(80, 24)
@@ -76,7 +85,7 @@ def smoke(command):
         assert b'\x1b[?25h' in captured, 'cursor was not restored'
         restored = termios.tcgetattr(slave)
         assert restored == original, 'terminal mode was not restored'
-        print(f'PASS {command[0]}: startup, navigation, resize, quit, alternate screen, cursor, termios')
+        print(f'PASS {command[0]}: startup, navigation, breakdown drill, resize, quit, alternate screen, cursor, termios')
     finally:
         if proc.poll() is None:
             proc.kill()

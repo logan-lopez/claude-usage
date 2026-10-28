@@ -90,6 +90,42 @@ export function readOverview(db: Database, now: number) {
   })();
 }
 export type OverviewData = ReturnType<typeof readOverview>;
+
+/** Breakdown's dimensions, in ←→ order. The first four come with sessions and exact-or-absent cost. */
+export const BREAKDOWN_DIMENSIONS = [
+  "project", "model", "skill", "agent", "mcp", "plugin", "tool", "effort", "entrypoint", "branch", "version",
+] as const;
+export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number];
+const GROUPED = ["project", "model", "entrypoint", "branch"] as const;
+type Grouped = (typeof GROUPED)[number];
+const grouped = (by: BreakdownDimension): by is Grouped => (GROUPED as readonly string[]).includes(by);
+/** One group: tokens always; sessions and cost for a grouped dimension; calls for tool. */
+export type BreakdownGroup = query.BreakdownRow &
+  Partial<Pick<query.GroupRow, "sessions" | "cost_usd" | "cost_complete">> & { calls?: number };
+export interface BreakdownData {
+  rows: BreakdownGroup[];
+  coverage: query.Coverage;
+  /** The window's total tokens, for each row's share. Tool rows overlap, so theirs can add past it. */
+  tokens: number;
+  overlapping: boolean;
+  note: string | null;
+  /** Rows carry sessions and measured cost. */
+  priced: boolean;
+}
+/** Breakdown's one read: `sessionGroupsReport` for the grouped dimensions, `attribution` for the rest. */
+export function readBreakdown(db: Database, by: BreakdownDimension, opts: { since: number | null }): BreakdownData {
+  return db.transaction(() => {
+    if (grouped(by)) {
+      // Every request lands in exactly one group, so the rows add up to the window.
+      const report = query.sessionGroupsReport(db, by, opts);
+      return { rows: report.rows, coverage: report.coverage, tokens: report.rows.reduce((n, r) => n + r.total_tokens, 0),
+        overlapping: false, note: null, priced: true };
+    }
+    const report = query.attribution(db, by, opts);
+    return { rows: report.rows, coverage: report.coverage, tokens: query.corpusTotals(db, opts.since).total_tokens,
+      overlapping: report.overlapping, note: report.note, priced: false };
+  })();
+}
 export type Diagnostics = Awaited<ReturnType<typeof doctor>>;
 export interface TuiDependencies {
   now: () => number;
@@ -99,6 +135,7 @@ export interface TuiDependencies {
   ) => ReturnType<typeof query.sessionPage>;
   costs: (ids: string[]) => Record<string, query.CostRow>;
   detail: (id: string) => query.SessionDetail | null;
+  breakdown: (by: BreakdownDimension, opts: { since: number | null }) => BreakdownData;
   version: () => number;
   diagnostics: () => ReturnType<typeof doctor>;
   refresh: () => ReturnType<typeof refreshFromApi>;
@@ -117,6 +154,7 @@ export function archiveDependencies(
     page: (opts) => query.sessionPage(db, opts),
     costs: (ids) => query.sessionCosts(db, ids),
     detail: (id) => query.getSession(db, id),
+    breakdown: (by, opts) => readBreakdown(db, by, opts),
     version: () => dataVersion(db),
     diagnostics: () => doctor(db, file, { archiveOnly: true }),
     pollMs: 5000,

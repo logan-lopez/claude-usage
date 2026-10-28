@@ -358,6 +358,11 @@ export function sessionCosts(db: Database, ids: string[]): Record<string, CostRo
  *
  * Apportioning a split session's cost across groups needs per-token prices,
  * which is phase 3. `cusage cost` is where that belongs.
+ *
+ * Each (session, group) pair in the selection arrives in one statement with
+ * its session's lifetime request and group counts, how many of its requests
+ * the filters kept, and its measured cost. Three queries per session took
+ * about 330 ms on 93K requests; this takes about 230.
  */
 export function groupSessions(
   db: Database,
@@ -369,16 +374,21 @@ export function groupSessions(
   const w = requestWhere(opts);
   const totals = db.query(`SELECT COALESCE(${column}, '(unknown)') key, COUNT(DISTINCT session_id) sessions,
     ${TOTALS_SELECT} FROM requests WHERE ${w.sql} GROUP BY ${column} ORDER BY total_tokens DESC`).all(w.params) as GroupRow[];
-  const memberships = db.query(`SELECT DISTINCT session_id, COALESCE(${column}, '(unknown)') key FROM requests WHERE ${w.sql}`).all(w.params) as { session_id: string; key: string }[];
-  const costs = new Map<string, ReturnType<typeof exactSessionCost>>();
-  for (const id of new Set(memberships.map(r => r.session_id))) {
-    const all = db.query(`SELECT COUNT(*) n, COUNT(DISTINCT COALESCE(${column}, '(unknown)')) groups FROM requests WHERE session_id=$id`).get({ $id: id }) as { n: number; groups: number };
-    const selected = db.query(`SELECT COUNT(*) n FROM requests WHERE session_id=$id AND ${w.sql}`).get({ ...w.params, $id: id }) as { n: number };
-    const cost = db.query(`SELECT ${MEASURED_COST} AS total_cost_usd FROM sessions WHERE session_id=?`).get(id) as { total_cost_usd: number | null } | null;
-    costs.set(id, exactSessionCost(cost?.total_cost_usd ?? null, all.groups, all.n === selected.n));
+  const memberships = db.query(`WITH member AS (SELECT DISTINCT session_id, COALESCE(${column}, '(unknown)') key FROM requests WHERE ${w.sql}),
+    whole AS (SELECT session_id, COUNT(*) n, COUNT(DISTINCT COALESCE(${column}, '(unknown)')) groups, SUM(${w.sql}) selected
+      FROM requests WHERE session_id IN (SELECT session_id FROM member) GROUP BY session_id)
+    SELECT member.key, whole.n, whole.groups, whole.selected, cost.total_cost_usd
+    FROM member JOIN whole USING (session_id)
+    LEFT JOIN (SELECT session_id, ${MEASURED_COST} AS total_cost_usd FROM sessions) cost USING (session_id)`)
+    .all(w.params) as { key: string; n: number; groups: number; selected: number; total_cost_usd: number | null }[];
+  const costs = new Map<string, ReturnType<typeof exactSessionCost>[]>();
+  for (const m of memberships) {
+    let parts = costs.get(m.key);
+    if (!parts) costs.set(m.key, (parts = []));
+    parts.push(exactSessionCost(m.total_cost_usd, m.groups, m.n === m.selected));
   }
   return totals.map(t => {
-    const parts = memberships.filter(r => r.key === t.key).map(r => costs.get(r.session_id)!);
+    const parts = costs.get(t.key) ?? [];
     return { ...t, cost_usd: parts.reduce((n, r) => n + r.cost_usd, 0),
       sessions_split: parts.reduce((n, r) => n + r.sessions_split, 0),
       sessions_unpriced: parts.reduce((n, r) => n + r.sessions_unpriced, 0), cost_complete: parts.every(r => r.cost_complete) };
