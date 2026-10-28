@@ -61,7 +61,7 @@ test("5 shows Limits; it reads only when shown, once, after a change passed it b
   expect(counts.limits).toBe(2);
   await app.key("?");
   expect(app.frame()).toContain("Limits · 72 hours help");
-  expect(app.frame()).toContain("5 Limits switch screens");
+  expect(app.frame()).toContain("4 Timeline · 5 Limits switch screens");
   expect(app.frame()).toContain("drops by at least 5 points and by half");
   expect(app.frame()).toContain("the meter also counts claude.ai and the desktop app");
 });

@@ -64,7 +64,7 @@ test("3 shows Breakdown; it reads only when shown, once, after a change passed i
   expect(counts.breakdown).toBe(2);
   await app.key("?");
   expect(app.frame()).toContain("Breakdown · project help");
-  expect(app.frame()).toContain("3 Breakdown · 5 Limits switch screens");
+  expect(app.frame()).toContain("3 Breakdown · 4 Timeline · 5 Limits switch screens");
   expect(app.frame()).toContain("some of the group's sessions were left out");
 });
 

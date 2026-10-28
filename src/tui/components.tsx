@@ -112,11 +112,14 @@ export function BarChart({
   width,
   height,
   marker,
+  partial = true,
 }: {
   values: number[];
   width: number;
   height: number;
   marker?: number;
+  /** The last bar is a bucket still filling, in the accent colour. */
+  partial?: boolean;
 }) {
   const palette = useContext(PaletteContext);
   if (!values.length) return null;
@@ -129,8 +132,8 @@ export function BarChart({
         ? "─"
         : " "
     ).repeat(Math.max(1, step - 1)) + (step > 1 ? " " : "");
-  const history = values.slice(0, -1);
-  const today = values.at(-1)!;
+  const history = partial ? values.slice(0, -1) : values;
+  const today = partial ? values.at(-1)! : null;
   return (
     <Box flexDirection="column">
       {Array.from({ length: height }, (_, i) => (
@@ -138,7 +141,7 @@ export function BarChart({
           <Text color={palette.muted}>
             {history.map((v) => cell(v, i)).join("")}
           </Text>
-          <Text color={palette.accent}>{cell(today, i)}</Text>
+          {today !== null && <Text color={palette.accent}>{cell(today, i)}</Text>}
         </Text>
       ))}
       {marker !== undefined && (

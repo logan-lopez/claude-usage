@@ -13,6 +13,7 @@ import { useSessionsScreen } from "./sessions.tsx";
 import { useDetailScreen } from "./detail.tsx";
 import { useBreakdownScreen } from "./breakdown.tsx";
 import { useLimitsScreen } from "./limits.tsx";
+import { useTimelineScreen } from "./timeline.tsx";
 import { Help } from "./help.tsx";
 import { KeyTarget, type KeyHandler } from "./keys.ts";
 import { MIN_COLUMNS, MIN_ROWS, contentHeight } from "./layout.ts";
@@ -108,8 +109,9 @@ export function App({
   const sessions = useSessionsScreen({ deps, report, height, open });
   const drilled = useSessionsScreen({ deps, report, height, open, drilled: true });
   const breakdown = useBreakdownScreen({ deps, report, height, drill });
+  const timeline = useTimelineScreen({ deps, report, height, width, drill });
   const limits = useLimitsScreen({ deps, report, height, width, drill });
-  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, breakdown, limits, drill: drilled, detail };
+  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, breakdown, timeline, limits, drill: drilled, detail };
   models.current = screens;
   const current = screens[screen];
 

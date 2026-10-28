@@ -256,7 +256,7 @@ test("help shows the screen's own lines, then the shell's, with its own footer",
     await app.key("?");
     expect(app.frame()).toContain(heading);
     expect(app.frame()).toContain(line);
-    expect(app.frame()).toContain("1 Overview · 2 Sessions · 3 Breakdown · 5 Limits switch screens");
+    expect(app.frame()).toContain("1 Overview · 2 Sessions · 3 Breakdown · 4 Timeline · 5 Limits switch screens");
     expect(app.frame()).toContain("↑↓ scroll · Esc close · Ctrl+C quit");
     expect(app.frame()).not.toContain("Enter apply");
     await app.key("\u001b");
