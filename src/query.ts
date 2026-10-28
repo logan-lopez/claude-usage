@@ -264,18 +264,48 @@ export function listSessions(db: Database, opts: SessionsOptions = {}): SessionR
 
 /** Session filters choose identities; totals always include every request. */
 export type SessionSort = "activity" | "tokens" | "requests";
+/** Sessions with at least one request matching every field set here; totals stay whole-session. */
+export interface SessionScope {
+  /** A request at or after this time, and before `until`. */
+  since?: number | null;
+  until?: number | null;
+  /** A request whose `by` value is exactly `key`; `key: null` means the column is NULL. */
+  by?: AttributionDimension | "project";
+  key?: string | null;
+}
 export interface SessionPageOptions extends RequestFilters {
   search?: string; sort?: SessionSort; offset?: number; pageSize?: number;
+  scope?: SessionScope;
+}
+/**
+ * One EXISTS holds the range and the key, so the same request satisfies both: what a group row of
+ * `attribution(by, { since, until })` counted. Columns come from `ATTRIBUTION_COLUMNS`, never input.
+ */
+function scopeWhere(scope: SessionScope | undefined) {
+  if (!scope) return { sql: "", params: {} };
+  const column = scope.by === "project" ? "project" : scope.by && scope.by !== "tool" ? ATTRIBUTION_COLUMNS[scope.by] : null;
+  if (scope.by && scope.by !== "tool" && !column) throw new Error("invalid scope dimension");
+  const key = !scope.by ? "" : scope.by === "tool"
+    ? `AND EXISTS (SELECT 1 FROM tool_calls st WHERE st.session_id = sr.session_id AND st.message_id = sr.message_id AND st.tool_name IS $scopeKey)`
+    : `AND sr.${column} IS $scopeKey`;
+  return {
+    sql: `AND EXISTS (SELECT 1 FROM requests sr WHERE sr.session_id = s.session_id
+      AND ($scopeSince IS NULL OR sr.ts_ms >= $scopeSince) AND ($scopeUntil IS NULL OR sr.ts_ms < $scopeUntil) ${key})`,
+    params: { $scopeSince: scope.since ?? null, $scopeUntil: scope.until ?? null,
+      ...(scope.by ? { $scopeKey: scope.key ?? null } : {}) },
+  };
 }
 export function sessionPage(db: Database, opts: SessionPageOptions = {}) {
+  const scope = scopeWhere(opts.scope);
   const where = `COALESCE(r.requests, 0) > 0
     AND ($since IS NULL OR s.last_ts_ms >= $since)
     AND ($until IS NULL OR s.last_ts_ms < $until)
     AND ($project IS NULL OR instr(lower(COALESCE(s.project,'')), lower($project)) > 0)
     AND ($model IS NULL OR EXISTS (SELECT 1 FROM requests mr WHERE mr.session_id=s.session_id AND instr(lower(COALESCE(mr.model,'')), lower($model)) > 0))
-    AND ($search = '' OR instr(lower(s.session_id), lower($search)) > 0 OR instr(lower(COALESCE(s.slug,'')), lower($search)) > 0)`;
+    AND ($search = '' OR instr(lower(s.session_id), lower($search)) > 0 OR instr(lower(COALESCE(s.slug,'')), lower($search)) > 0)
+    ${scope.sql}`;
   const params = { $since: opts.since ?? null, $until: opts.until ?? null,
-    $project: opts.project ?? null, $model: opts.model ?? null, $search: opts.search ?? "" };
+    $project: opts.project ?? null, $model: opts.model ?? null, $search: opts.search ?? "", ...scope.params };
   const order = opts.sort === "tokens" ? "r.total_tokens" : opts.sort === "requests" ? "r.requests" : "s.last_ts_ms";
   const base = `${SESSION_SELECT} WHERE ${where}`;
   const total = (db.query(`SELECT COUNT(*) n FROM (${base})`).get(params) as {n: number}).n;

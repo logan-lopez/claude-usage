@@ -191,3 +191,59 @@ test("a WAL archive without -wal/-shm files still opens read-only and refuses wr
   expect(() => reader.run("INSERT INTO meta VALUES('x','y')")).toThrow();
   reader.close();
 });
+
+test("a session scope finds sessions with one request matching all of it, with whole-session totals", () => {
+  const { db } = dependencies();
+  type Req = { session_id: string; message_id: string; ts_ms: number; project: string | null; attribution_skill: string | null };
+  const requests = db.query("SELECT session_id, message_id, ts_ms, project, attribution_skill FROM requests").all() as Req[];
+  const calls = db.query("SELECT session_id, message_id, tool_name FROM tool_calls").all() as { session_id: string; message_id: string; tool_name: string | null }[];
+  const all = sessionPage(db).rows;
+  const ids = (opts: Parameters<typeof sessionPage>[1]) => sessionPage(db, opts).rows.map((r) => r.session_id).sort();
+  /** The scope worked out in plain JS from the raw rows, sharing no SQL with `sessionPage`. */
+  const expected = (match: (r: Req) => boolean) =>
+    all.map((s) => s.session_id).filter((id) => requests.some((r) => r.session_id === id && match(r))).sort();
+
+  // A range finds a session with a request in it that ended later, which since/until miss.
+  const session = all.find((s) => s.session_id.startsWith("00000012"))!;
+  const own = requests.filter((r) => r.session_id === session.session_id).sort((a, b) => a.ts_ms - b.ts_ms);
+  const first = { since: own[0]!.ts_ms, until: own[0]!.ts_ms + 1 };
+  expect(ids({ scope: first })).toContain(session.session_id);
+  expect(ids({ scope: first })).toEqual(expected((r) => r.ts_ms >= first.since && r.ts_ms < first.until));
+  expect(ids(first)).not.toContain(session.session_id);
+
+  // Project is exact and on each request's column, not a substring of the session's own.
+  expect(ids({ scope: { by: "project", key: "proj-1" } })).toEqual([]);
+  expect(ids({ project: "proj-1" }).length).toBeGreaterThan(0);
+  expect(session.project).toBe("proj-15");
+  expect(ids({ scope: { by: "project", key: "proj-08" } })).toContain(session.session_id);
+  expect(ids({ project: "proj-08" })).not.toContain(session.session_id);
+  for (const key of ["proj-08", "proj-15", "proj-06"])
+    expect(ids({ scope: { by: "project", key } })).toEqual(expected((r) => r.project === key));
+
+  // A skill with a range needs one request with both: a request inside the range that used another
+  // skill, or none, doesn't count.
+  const skill = own.find((r) => r.attribution_skill)!.attribution_skill!;
+  const other = own.find((r) => r.attribution_skill !== skill)!;
+  const range = { since: other.ts_ms, until: other.ts_ms + 1 };
+  expect(own.some((r) => r.ts_ms >= range.since && r.ts_ms < range.until && r.attribution_skill === skill)).toBe(false);
+  expect(ids({ scope: { by: "skill", key: skill } })).toContain(session.session_id);
+  expect(ids({ scope: range })).toContain(session.session_id);
+  expect(ids({ scope: { ...range, by: "skill", key: skill } })).not.toContain(session.session_id);
+
+  // A tool matches through tool_calls.
+  const tool = calls.find((c) => c.tool_name === "EnterWorktree")!;
+  const viaCalls = (name: string) => (r: Req) =>
+    calls.some((c) => c.session_id === r.session_id && c.message_id === r.message_id && c.tool_name === name);
+  expect(ids({ scope: { by: "tool", key: "EnterWorktree" } })).toEqual([tool.session_id]);
+  expect(ids({ scope: { by: "tool", key: "Bash" } })).toEqual(expected(viaCalls("Bash")));
+
+  // key: null matches NULL, not every session.
+  expect(ids({ scope: { by: "skill", key: null } })).toEqual(expected((r) => r.attribution_skill === null));
+  expect(ids({ scope: { by: "skill", key: "superpowers:writing-plans" } })).toEqual([session.session_id]);
+
+  // Amounts stay whole-session, and the other filters still apply alongside the scope.
+  const scoped = sessionPage(db, { scope: first }).rows.find((r) => r.session_id === session.session_id)!;
+  expect(scoped).toEqual(session);
+  expect(ids({ scope: { by: "project", key: "proj-08" }, search: "nothing-matches" })).toEqual([]);
+  expect(() => sessionPage(db, { scope: { by: "nope" as "skill", key: "x" } })).toThrow("invalid scope dimension");
+});
