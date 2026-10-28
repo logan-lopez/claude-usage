@@ -2,9 +2,10 @@
 
 `cusage-tui` is a full-screen terminal browser for the archive: an Overview of limits and
 activity, a searchable list of sessions, where the tokens went by project, skill, tool or any other
-dimension, the sessions behind a day or a group, and each session in detail.
+dimension, output over days, weeks or months, the limits and their five-hour cycles, the sessions
+behind a day, a group, a bucket or a cycle, and each session in detail.
 
-**Covers:** [TUI](../architecture/tui.md), [Cost](../architecture/cost.md)
+**Covers:** [TUI](../architecture/tui.md), [Cost](../architecture/cost.md), [Limits](../architecture/limits.md)
 
 ## Starting it
 
@@ -71,6 +72,45 @@ group and window, with whole-session totals. The tab bar names it, as in
 `▸ Sessions · skill superpowers:writing-plans · last 30 days`. It works like a day's sessions,
 below, and Esc comes back to the same group.
 
+**4 Timeline** charts your output tokens per day, week or month, back to your first request.
+
+- The line at the top gives the range on screen, its output tokens, and how many classic books
+  that is: `≈ 1.8 × Moby-Dick`. It counts output tokens (what Claude wrote) at 1.3 tokens a word,
+  a rule of thumb rather than a measured figure, so it's only ever approximate. The books are *Of
+  Mice and Men*, *The Great Gatsby*, *Moby-Dick* and *War and Peace*; it names the biggest one the
+  output covers at least once.
+- ← and → (or `h` and `l`) move the ▲ from bar to bar. It starts on the newest, which is partial,
+  and moving past the left edge scrolls the chart back in time. The line under the bars names the
+  bucket and its output tokens.
+- `b` changes the bucket: UTC days, weeks from Monday, or calendar months. The ▲ stays on the week
+  or month that holds the day you were on, and going back to days finds that day again.
+- The table under the chart is the bucket under the ▲: an `all` row, then, after `g` splits it by
+  model, project or effort, one row per series with any requests. Each row shows output, total
+  tokens, requests and cache-read share (cache reads as a share of all input).
+- Bars are output tokens rather than total tokens, because cache reads are nearly all of the
+  total and would chart context size rather than work. There's no cost here: a session that
+  crosses midnight has one cost for the whole session, so today would read $0.00 while you spend.
+- Enter lists the sessions with at least one request in that bucket, or in that bucket and
+  series, such as `▸ Sessions · 2026-10-21 UTC · model claude-opus-5`.
+
+**5 Limits** is the tab to leave open.
+
+- **Now** is each meter's current reading with its source, age and reset, the server's limits
+  with the binding one marked, every archived source with its own five-hour and seven-day figures,
+  and any disagreement between two current sources. A reading over 15 minutes old says `STALE`.
+  It updates by itself when a new reading lands, and the ages tick.
+- **History** is the seven-day, five-hour and scoped meters as sparklines of peaks: 72 hours by
+  the hour (where it starts), 7 days or 30 days, with ← and → (or `h` and `l`). `·` is a bucket
+  with no reading.
+- **Five-hour cycles** lists the cycles the five-hour meter went through in that window, newest
+  first: start, length, peak and time to peak, the reset (`confirmed` when Anthropic's reset time
+  matched it, otherwise the two readings it fell between), and your Claude Code requests and
+  output during it. Gaps of more than 30 minutes in the readings show as gap rows.
+- Enter on a cycle lists the sessions active during it. The local figures are context, not the
+  cause: the meter also counts claude.ai and the desktop app, which aren't on disk.
+- At 36 rows and larger, Now, History and the cycles all show. In a smaller terminal Tab switches
+  between Now and History.
+
 **A day's sessions** opens over Overview when you press Enter on a day in Daily output. The tab
 bar shows it as `▸ Sessions · 2026-10-21 UTC`. It lists every session with at least one request
 that UTC day, including ones that started earlier or went on after midnight, with whole-session
@@ -88,22 +128,24 @@ durations in hours and minutes and times in UTC, to the minute. Tool sections co
 don't assign tokens to tools. Esc goes back to where you were, with the same selection and
 filters.
 
-The tab bar shows where you are: the three tabs, then whatever you opened over them, such as
-`▸ Sessions · 2026-10-21 UTC › Session Detail`. Esc steps back one, and `1`, `2` or `3` goes
-straight to that tab from anywhere.
+The tab bar shows where you are: the five tabs, then whatever you opened over them, such as
+`▸ Sessions · 2026-10-21 UTC › Session Detail`. In a narrow terminal the other tabs shrink to
+their digits to make room. Esc steps back one, and `1` to `5` goes straight to that tab from
+anywhere.
 
 ## Keys
 
 | Key | Action |
 | --- | --- |
-| `1`, `2`, `3` | Overview, Sessions, Breakdown, from anywhere |
-| Tab, Shift+Tab | Next or previous panel, or Detail section |
+| `1` to `5` | Overview, Sessions, Breakdown, Timeline, Limits, from anywhere |
+| Tab, Shift+Tab | Next or previous panel, or Detail section; Now or History in a small Limits |
 | arrows, `j`/`k`, PageUp/PageDown, Home/End | Move or scroll |
-| Enter | Open a session; in Daily output, list the chosen day's sessions; in Breakdown, the group's |
+| Enter | Open a session; in Daily output, list the chosen day's sessions; in Breakdown, the group's; in Timeline, the bucket's or series'; in Limits, the cycle's |
 | Esc | Go back one step, or cancel |
 | `/`, `f`, `s` | Search, filters, sort (Sessions) |
-| left, right | Choose a day in Daily output (or `h`/`l`); the dimension in Breakdown (or `h`/`l`); the attribution dimension in Detail; in other Detail sections, change section |
+| left, right | Choose a day in Daily output (or `h`/`l`); the dimension in Breakdown, the bucket in Timeline, the zoom in Limits (each also `h`/`l`); the attribution dimension in Detail; in other Detail sections, change section |
 | `w` | Change Breakdown's window |
+| `b`, `g` | Timeline's bucket (day, week, month) and split (model, project, effort, none) |
 | `r` | Reread the archive and rerun the health checks |
 | `R` | Fetch fresh limits |
 | `?` | Help: keys, marks and the theme in use |

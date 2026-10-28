@@ -1,8 +1,8 @@
 # The explorer (TUI)
 
 `cusage-tui` is a separate Ink executable that browses the archive read-only through `query.ts`,
-with Overview, Sessions and Breakdown tabs, and a drilled Sessions list and Session Detail pushed
-over them.
+with Overview, Sessions, Breakdown, Timeline and Limits tabs, and a drilled Sessions list and
+Session Detail pushed over them.
 
 **Sources:** `src/tui.ts`, `src/tui/`, `patches/`
 
@@ -15,7 +15,9 @@ over them.
 | `src/tui/screen.ts` | The screen contract: `ScreenModel`, `Frame`, `TABS` and `ScreenId` |
 | `src/tui/useArchive.ts` | The archive lifecycle |
 | `src/tui/data.ts` | Opening the archive, the query-backed dependencies the screens read through, and the session page cache, which never evicts and is replaced on every filter change or reload |
-| `src/tui/overview.tsx`, `sessions.tsx`, `breakdown.tsx`, `detail.tsx` | Each exports a hook returning its screen's `ScreenModel`, and renders that screen and owns its keys |
+| `src/tui/overview.tsx`, `sessions.tsx`, `breakdown.tsx`, `timeline.tsx`, `limits.tsx`, `detail.tsx` | Each exports a hook returning its screen's `ScreenModel`, and renders that screen and owns its keys |
+| `src/tui/readings.ts` | Pure line builders for limit readings and meter history (`limitsLines`, `meterLines`), shared by Overview and Limits |
+| `src/tui/books.ts` | Timeline's book line: the books, `TOKENS_PER_WORD` and `bookLine(tokens)` |
 | `src/tui/help.tsx` | The help overlay the shell draws over any screen |
 | `src/tui/keys.ts` | Key routing (`useKeys`) and `movement()` |
 | `src/tui/layout.ts` | The row budget: minimum size, chrome rows, and how a viewport's height becomes a page |
@@ -43,10 +45,10 @@ only on a successful read.
   `r`, not on every poll.
 
 **Screens.** Each screen module exports a hook (`useOverviewScreen`, `useSessionsScreen`,
-`useBreakdownScreen`, `useDetailScreen`) that returns a `ScreenModel` (`src/tui/screen.ts`) every render: its title and
+`useBreakdownScreen`, `useTimelineScreen`, `useLimitsScreen`, `useDetailScreen`) that returns a `ScreenModel` (`src/tui/screen.ts`) every render: its title and
 help context, footer hints, help lines, an optional `reload`, whether its own overlay owns the
 keyboard, and a `render(frame)`. `App` calls the hooks in a fixed order (Detail, Overview, the
-Sessions tab, the drilled Sessions, Breakdown) and builds a `Record<ScreenId, ScreenModel>`. From it, and from
+Sessions tab, the drilled Sessions, Breakdown, Timeline, Limits) and builds a `Record<ScreenId, ScreenModel>`. From it, and from
 `TABS`, it derives the tab bar, the digit keys, the footer hints, the help heading and lines, and
 the reload loop.
 
@@ -58,7 +60,8 @@ way.
   screen. Esc on a tab does nothing.
 - A digit key clears the stack to that tab, from anywhere.
 - The tab bar shows the tabs, then each pushed screen's title (`▸ Sessions · 2026-10-21 UTC ›
-  Session Detail`).
+  Session Detail`). When that row is wider than the terminal, every tab but the stack's bottom one
+  shrinks to its digit, so a drilled title still fits beside five tabs at 80 columns.
 - Every change goes through the shell's `show`, which clears `keys.current` and reloads the new top
   if it's stale.
 
@@ -71,8 +74,9 @@ through `report` and pushes nothing.
   `drill(scope, label)`, which lists the sessions in a `SessionScope` (`query.ts`) with no filters.
   Its title is `Sessions · <label>`. Search, filters and sort apply on top of the scope, and
   clearing them keeps it. Opening a drill never changes the Sessions tab's filters or selection.
-- Overview's Daily output drills into the chosen UTC day, and Breakdown into a group over its
-  window.
+- Overview's Daily output drills into the chosen UTC day, Breakdown into a group over its window,
+  Timeline into a bucket or one series in it, and Limits into a five-hour cycle's
+  `[startMs, endMs)`.
 - Sessions owns its editors (search, filters, project, model, activity, sort). It renders the
   editor in place of the table while `overlay` is true; the shell only calls `closeOverlay` on
   Esc.
@@ -126,6 +130,38 @@ from `attribution`, with no cost, and calls for tool. Both run in one read trans
 - Every dimension reads in under 300 ms at 30 days or all time on 93K requests (2026-10-28).
   Project, the slowest, takes about 250–285 ms.
 
+**Timeline.** Output-token bars for every bucket back to the first request, through one
+dependency, `timeline(bucket, by)` (`readTimeline` in `data.ts`), which groups `timeline()`'s rows
+into `{ tsMs, endMs, output, total, rows }` per bucket. `timeline()` zero-fills every series in
+every bucket (365 a day by project), so `rows` keeps only series with requests, by output tokens.
+
+- The bars are output tokens, not total: cache reads are about 98% of total tokens, so total bars
+  would chart context size. The table under the chart is the cursor's bucket, `all` and then its
+  series, with total tokens, requests and cache-read share.
+- As many buckets show as fit at two columns each, at most four columns a bar. The view keeps the
+  cursor as a time inside its bucket and the window's right edge as a bucket start (null follows
+  the newest), so a reread, a new bucket or `b` to a coarser bucket and back finds the same one.
+- `BarChart` takes `partial={false}` once the window is scrolled back from the newest bucket.
+- Reads are cached by bucket and split until the next `reload`. No cost column: `cost --by day`
+  drops a session that crosses midnight (`statusline()`'s comment in `query.ts`).
+- The book line (`books.ts`) counts the visible buckets' output tokens at 1.3 tokens a word, a
+  rule of thumb rather than a measured figure, and names the largest book they cover once.
+- Every read is under 300 ms all time on 93K requests (114–171 ms, 2026-10-28).
+
+**Limits.** The current readings come from the frame (`frame.data.limits`, Overview's own read),
+so they update on every archive change and their ages tick with `frame.now`. The tab's one
+dependency, `limits(since, bucketMs)` (`readLimits`), reads `limitsHistory` and `blocks()` for
+the zoom in one transaction.
+
+- The zooms are 72 hours (hourly, as Overview's Meters), 7 days and 30 days, whose bucket is
+  `chooseBucket(span, chartWidth)`. A read is cached by zoom and bucket until the next `reload`; a
+  resize alone doesn't reread.
+- At 36 rows and up, Now, History and the cycles stack, and the cycles take the rows left over, at
+  least five. Below that Tab switches between Now (which ↑↓ scrolls) and History with the cycles.
+- Cycles are listed newest first, the selection kept by `startMs`. Enter on a gap does nothing.
+- Every zoom reads in under 130 ms on the live archive (2026-10-28), now that `blocks()` reads
+  each cycle's totals as a plain range ([Limits](limits.md#how-it-works)).
+
 **Limits on Overview.** Scoped history filters the exact selected model before hourly peak
 aggregation: the binding `weekly_scoped` model first, otherwise the latest archived one.
 Five-hour/seven-day sources and scoped sources are reported separately. Missing buckets stay null,
@@ -160,6 +196,9 @@ light or dark palette.
 
 ## Rules worth keeping
 
+- **Limits' current readings come from the frame, never a read of its own.** Overview's read
+  already runs `currentLimits` on every archive change, and a second read could show a different
+  figure from the header's.
 - **Adding a tab is three edits.** A screen module whose hook returns a `ScreenModel`, a row in
   `TABS` (its id and digit key), and one hook call in `App` added to the record. Everything else
   (the tab bar, the digit key, hints, help, reload) follows from those. A tab that lists sessions

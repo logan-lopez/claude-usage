@@ -45,6 +45,9 @@ Server-reported limits  oauth-live · just now
 A binding constraint more than 15 minutes old is printed with its age and a hint to refresh, not
 as a bold answer.
 
+The explorer's Limits tab shows the same readings and sources, keeps them current while it's open,
+and adds zoomable history and the five-hour cycles ([The explorer](explorer.md)).
+
 ## Refreshing
 
 `limits` and `sync` fetch a fresh reading when the archived one is over 15 minutes old. To change

@@ -21,6 +21,9 @@ cusage timeline --bucket auto      # picks a bucket size for the window
 - Days with no activity are still shown, as zero.
 - `--by model|project|effort` gives one series per group.
 
+The explorer's Timeline tab charts the same buckets back to your first request, and lists the
+sessions behind any of them ([The explorer](explorer.md)).
+
 ## Five-hour cycles
 
 `cusage blocks --since 7d` lists the five-hour cycles the server's meter actually went through,
@@ -33,7 +36,8 @@ with your Claude Code tokens and requests alongside.
 - The first and last cycles are usually partial.
 
 The local token columns are context, not the cause of the meter's movement: the meter also counts
-claude.ai and the desktop app, which aren't on disk.
+claude.ai and the desktop app, which aren't on disk. The explorer's Limits tab lists the same
+cycles beside the meter history ([The explorer](explorer.md)).
 
 ## Cache
 

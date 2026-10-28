@@ -15,6 +15,6 @@ Start with [The archive](the-archive.md): everything else reads what it keeps.
 - [Over time](over-time.md): daily, weekly and monthly totals, observed five-hour cycles, and
   cache ratios.
 - [Scripting](scripting.md): `--json`, `--csv`, `export`, filters and exit codes.
-- [The explorer](explorer.md): `cusage-tui`, its screens and keys, theme and refresh.
+- [The explorer](explorer.md): `cusage-tui`, its five tabs and their keys, theme and refresh.
 - [Trusting the numbers](trusting-the-numbers.md): what the data can and can't tell you, and
   what cusage will never do.

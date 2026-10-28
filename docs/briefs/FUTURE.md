@@ -18,8 +18,9 @@ it. Cost, Doctor and Cache are under [Parked](#parked).
 - **Kill criteria:** a tab that adds nothing over its CLI table plus the Overview panels.
 
 Built: [brief 06](06-tui-tab-groundwork.md) (reload only what's shown, fast tool attribution,
-drill-down) and [brief 07](07-tui-breakdown-tab.md), Breakdown as tab 3. Timeline and Limits are
-scheduled in [brief 08](08-tui-timeline-and-limits-tabs.md).
+drill-down), [brief 07](07-tui-breakdown-tab.md), Breakdown as tab 3, and
+[brief 08](08-tui-timeline-and-limits-tabs.md), Timeline as tab 4 and Limits as tab 5. All three
+tabs are built; the kill criteria below are still Logan's to judge.
 
 ### Timeline
 
@@ -36,7 +37,7 @@ Enter on a bucket drills to the sessions active in it.
 - **Size:** S once brief 06 has landed.
 - **Kill criteria:** brief 06's day drill on Overview's Daily output already answers it, and you
   never zoom past 30 days.
-- **Scheduled:** [brief 08](08-tui-timeline-and-limits-tabs.md), as tab 4, with a book-comparison
+- **Built:** [brief 08](08-tui-timeline-and-limits-tabs.md), as tab 4, with a book-comparison
   line at the top (Logan, 2026-10-28).
 
 ### Limits
@@ -58,8 +59,8 @@ during it.
 - **Size:** M.
 - **Kill criteria:** you'd never leave the explorer on this tab rather than Overview. If so, a
   cycles panel on Overview gets most of it for S.
-- **Scheduled:** [brief 08](08-tui-timeline-and-limits-tabs.md), as tab 5, with the `blocks()`
-  speedup first.
+- **Built:** [brief 08](08-tui-timeline-and-limits-tabs.md), as tab 5, after the `blocks()`
+  speedup (30 days from about 2.4 s to 130 ms).
 
 ## Index-friendly request filters
 
