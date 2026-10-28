@@ -261,3 +261,133 @@ export interface SessionPageOptions extends RequestFilters {
     Sessions show the new data when you press `2`?
 
 Then stop. Write the report, and ask Logan before merging anything.
+
+## Report
+
+Built 2026-10-28 on `main`, one commit per step: `972b55d`, `3030827`, `0d1e79b`, `81f40a4`,
+`7bd4141`, then this report.
+
+### Built
+
+- **Reload what's shown** (`src/tui/App.tsx`, `src/tui/screen.ts`). The models are a
+  `Record<ScreenId, ScreenModel>` ref, with a `stale` set beside it. An archive change (first
+  read, poll, hourly tick, `r`) reloads the top of the stack and marks every other screen stale;
+  `show` reloads a stale screen before showing it, unless the caller has just loaded it (`open`,
+  `drill`), so opening Detail after a change reads it once, not twice. Startup loads Overview
+  only.
+- **Tool attribution** (`src/query.ts`). Two flat scans grouped in JavaScript: the filtered
+  requests summed per `(session_id, message_id)`, then `tool_calls`, each tool taking a message
+  once. Live archive, timed as in Already checked, three runs each:
+
+  | | Before | After |
+  | --- | --- | --- |
+  | all time | 2570, 2609, 2587 ms | 211, 195, 205 ms |
+  | 30d | 1524, 1530, 1774 ms | 198, 182, 169 ms |
+  | `cusage attribution --by tool --since all --json`, installed binary, wall | 2.61 s (brief) | 0.27–0.30 s |
+
+  The full all-time output hashed the same before and after (`14715298920804713356`), and a
+  scratch run of the old SQL against the new code on the live archive gave identical rows,
+  coverage and groups for no filter, 30d, project, model and limit.
+- **`SessionScope`** (`src/query.ts`), as pinned: one `EXISTS` over `requests` holds the range
+  and the key, `IS $key` so `null` matches NULL, tool through `tool_calls`. Column names come
+  from `ATTRIBUTION_COLUMNS` plus `project`; anything else throws. A scoped page on the live
+  archive takes 184–210 ms against 170 ms unscoped.
+- **The stack and the drilled Sessions** (`App.tsx`, `sessions.tsx`, `detail.tsx`). `screen` and
+  `origin` became a stack with a tab at the bottom. Esc on a pushed screen with no overlay pops
+  it in the shell, so Detail lost its `back` prop and its own Esc. A digit clears the stack. The
+  tab bar shows the trail (`▸ Sessions · 2026-09-06 UTC › Session Detail`). `useSessionsScreen`
+  is called twice; the drilled one keeps its scope in a ref beside the filters, names it above
+  them (`In 2026-09-06 UTC · All · …`), and adds two help lines and `Esc back` to its hints.
+- **Daily output** (`overview.tsx`, `components.tsx`). A day cursor in Overview's nav by UTC day
+  start, starting on today. ←→ and `h`/`l` move it (`"lll"` counts three); Enter drills.
+  `BarChart` takes a `marker` and draws ▲ under that bar on one more row, which fits the full
+  layout's panel exactly. The caption names the day and its output tokens.
+
+### Deviations
+
+- **Tool attribution is grouped in JavaScript, not SQL.** The brief's shape (dedup in SQL, then
+  join) measured 276 ms for the tokens pass alone, and with the calls and attributed passes about
+  625 ms. One statement over two `MATERIALIZED` CTEs took 488 ms. Sorting ~100K tuples of long id
+  strings in temp B-trees is the cost; a full scan of `requests` is 19 ms. Two scans and a `Map`
+  hit the target with room. The comment keeps the brief's reasoning and says why it's not SQL;
+  the CLI page says the same.
+- **The parity test has a second, synthetic archive.** The fixture has no message with two
+  request ids and no tool call without a `message_id`, which are exactly the cases the rewrite
+  changes. `tests/reports.test.ts` adds them, with the same oracle.
+- **The `SessionScope` range test uses one request's millisecond, not a UTC day.** No fixture
+  session spans two UTC days. A range around a session's first request still shows the point: the
+  scope finds it, and `since`/`until` on `last_ts_ms` don't.
+- **I committed the brief-writing session's work** (briefs 06 and 07, `FUTURE.md`, the README's
+  status and decisions changes) as `c47bd18`, apart from this brief's commits. They were in the
+  tree uncommitted when this session started, and `doctor` counts untracked files as a dirty
+  build, so "build ok at the final commit" couldn't pass with them out.
+- **Architecture pages moved with each step's commit,** not all in step 5, per AGENTS.md. Step 5
+  was the guide and the root README.
+
+### Defaults taken
+
+- The first caller is Overview's Daily output.
+- The drilled title is `Sessions · <label>`, with `<YYYY-MM-DD> UTC` as the label.
+- `f` edits filters on a drilled list; the scope stays, Clear all included, and only Esc leaves it.
+
+### Acceptance
+
+- `bun test`: 165 pass, 0 fail across 19 files (157 before). New tests:
+  - reload: startup reads no Sessions page or Detail; a change on Overview runs neither; `2` runs
+    one Sessions reload and shows its first page; `1` then `2` runs none; opening a stale Detail
+    reads it once. A change while Sessions is showing reloads it.
+  - tool parity: deep-equal against the old SQL kept in the test, on the fixture for none,
+    `since`, `until`, `project`, `model`, `limit` and all of them together (each asserted to
+    change the rows), plus the synthetic archive. Key order of the rows is checked too.
+  - `SessionScope`: every listed case, each against a plain-JS pass over the raw rows.
+  - the stack: → then Enter drills to the right day with the right count; help says what the
+    scope means; Esc keeps panel and cursor; Enter → Detail, Esc back to the list with its
+    selection, Esc twice to Overview; `2` from a drilled list shows the tab's own search intact; a
+    failed drill pushes nothing and reports.
+  - chunks: `"\x1b[C\r"` at 80×24 drills to the day after the old cursor; `"hhhhh"` moves five.
+- `bun run typecheck`: clean.
+- Live timing, read-only from the scratchpad: above, before and after.
+- `rg -n "origin" src/tui/App.tsx`: nothing.
+- `make build`, then `python3 tools/tui-pty-smoke.py` on a fixture archive built in the
+  scratchpad: PASS for `bun` and for `dist/cusage-tui`.
+- `make install`, then `cusage doctor`: `build ok` at `7bd4141`, the last code and docs commit.
+  This report's commit is docs-only; the hand-back says whether a reinstall at it reads `ok` too.
+
+### Size
+
+Sized M, this session S (13 active min, 13 wall, 0 compactions) before the report.
+
+### Spot checks for Logan
+
+In kitty with the installed `cusage-tui`:
+
+- On Overview, Tab (or Shift+Tab) to Daily output, ←→ over the days, then Enter. Is the drilled
+  list the sessions you remember from that day?
+- Esc back. The ▲ is where you left it.
+- With an agent sync landing while you're on Overview (or `cusage sync` in another pane), does
+  Sessions show the new data when you press `2`?
+- The ▲ under the bars: at 120 columns it sits under the middle of a 3-wide bar. Does it read as
+  pointing at that day?
+
+### Docs updated
+
+- [The TUI page](../architecture/tui.md): the intro, the file table, Screens, a new stack and
+  pushing section, Browsing state (the day cursor), the reload rule, Sessions (scope against
+  filters), and "Adding a tab", which now names `drill`, plus a rule that `reload` runs only
+  while shown.
+- [The CLI page](../architecture/cli.md): how tool attribution works and why it's not SQL.
+- [The explorer guide](../guide/explorer.md): Daily output's day cursor, a day's sessions, the
+  tab bar's trail, Esc and the digit keys, the keys table, and staying current.
+- The root README's feature line for the explorer.
+- [`README.md`](README.md): one decisions row, Tool attribution.
+
+### Follow-ups
+
+- At 80 columns the footer hints run past the width on Daily output, Recent sessions, the
+  Sessions tab and a drilled list, and lose `q quit` and sometimes `? help`. The last two were
+  already that long before this brief.
+- Brief 05's follow-up "Detail's `reload` runs after every archive change even when Detail
+  isn't showing" is resolved by step 1. Its two chunked-key follow-ups (Detail's Tab then ↓,
+  Sessions' editor paste) aren't made easier by the stack and are still open.
+- Help on a drilled list leads with the scope lines, then Sessions' own. When Breakdown drills
+  by a tool or skill, the label will carry the meaning; the help lines are generic on purpose.
