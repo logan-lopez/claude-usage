@@ -106,14 +106,17 @@ export function Viewport({
  * One string per chart row, with the last (partial) bucket in the accent colour. Any nonzero value
  * gets at least the bottom block, so a small day never reads as a zero day; zero days keep `─`.
  */
+/** Bars, today's last; `marker` draws a ▲ under that bar on one more row. */
 export function BarChart({
   values,
   width,
   height,
+  marker,
 }: {
   values: number[];
   width: number;
   height: number;
+  marker?: number;
 }) {
   const palette = useContext(PaletteContext);
   if (!values.length) return null;
@@ -138,6 +141,11 @@ export function BarChart({
           <Text color={palette.accent}>{cell(today, i)}</Text>
         </Text>
       ))}
+      {marker !== undefined && (
+        <Text color={palette.accent}>
+          {" ".repeat(marker * step + Math.floor((Math.max(1, step - 1) - 1) / 2))}▲
+        </Text>
+      )}
     </Box>
   );
 }

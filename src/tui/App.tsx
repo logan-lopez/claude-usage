@@ -14,7 +14,8 @@ import { useDetailScreen } from "./detail.tsx";
 import { Help } from "./help.tsx";
 import { KeyTarget, type KeyHandler } from "./keys.ts";
 import { MIN_COLUMNS, MIN_ROWS, contentHeight } from "./layout.ts";
-import { TABS, type ScreenId, type ScreenModel, type TabId } from "./screen.ts";
+import { TABS, type ScreenId, type ScreenModel } from "./screen.ts";
+import type { SessionScope } from "../query.ts";
 
 /** `MONO` has no colour overrides, so the terminal's own styling applies. */
 const theme = (palette: Palette) =>
@@ -38,8 +39,6 @@ const theme = (palette: Palette) =>
   });
 const themes = { dark: theme(palettes.dark), light: theme(palettes.light), mono: theme(MONO) };
 
-const isTab = (id: ScreenId): id is TabId => TABS.some((t) => t.id === id);
-
 export function App({
   deps,
   mono = false,
@@ -62,43 +61,51 @@ export function App({
   const height = contentHeight(rows);
   const palette = mono ? MONO : palettes[themeName];
   const { exit } = useApp();
-  const [screen, setScreen] = useState<ScreenId>(TABS[0].id);
-  const [origin, setOrigin] = useState<TabId>(TABS[0].id);
+  // What's on screen: a tab at the bottom, then what was pushed over it (a drilled list, Detail).
+  const [stack, setStack] = useState<ScreenId[]>([TABS[0].id]);
+  const screen = stack.at(-1)!;
   const [help, setHelp] = useState(false);
   const keys = useRef<KeyHandler | null>(null);
   // The models of the last render, and the screens an archive change has passed by while hidden.
   const models = useRef({} as Record<ScreenId, ScreenModel>);
   const stale = useRef(new Set<ScreenId>());
-  // What's showing as last committed, for reloads from timers.
-  const shown = useRef(screen);
+  // The stack as last committed, for reloads from timers and keys later in the same chunk.
+  const shown = useRef(stack);
   // Only the screen that's showing rereads; the rest wait until they're shown.
   const archive = useArchive(deps, () => {
+    const top = shown.current.at(-1)!;
     for (const id of Object.keys(models.current) as ScreenId[])
-      if (id !== shown.current) stale.current.add(id);
-    models.current[shown.current]?.reload?.();
+      if (id !== top) stale.current.add(id);
+    models.current[top]?.reload?.();
   });
   const { data, now, report } = archive;
 
   /**
-   * Change what's on screen, rereading it first if an archive change passed it by; `fresh` says the
-   * caller has just loaded it. The old screen's handler stays in `keys` until the next commit, so a
-   * key later in the same chunk would reach it; dropping that key is better than misrouting it.
+   * Change what's on screen to `next`'s top, rereading it first if an archive change passed it by;
+   * `fresh` says the caller has just loaded it. The old screen's handler stays in `keys` until the
+   * next commit, so a key later in the same chunk would reach it; dropping that key is better than
+   * misrouting it.
    */
-  const show = (id: ScreenId, fresh = false) => {
+  const show = (next: ScreenId[], fresh = false) => {
     keys.current = null;
+    const id = next.at(-1)!;
     if (stale.current.delete(id) && !fresh) models.current[id]?.reload?.();
-    shown.current = id;
-    setScreen(id);
+    shown.current = next;
+    setStack(next);
   };
-  const detail = useDetailScreen({ deps, report, back: () => show(origin) });
+  /** Push a screen its hook has just loaded. */
+  const push = (id: ScreenId) => show([...shown.current, id], true);
+  const detail = useDetailScreen({ deps, report });
   const open = (id: string | undefined) => {
-    if (!detail.open(id)) return;
-    if (isTab(screen)) setOrigin(screen);
-    show("detail", true);
+    if (detail.open(id)) push("detail");
   };
-  const overview = useOverviewScreen({ open });
+  const drill = (scope: SessionScope, label: string) => {
+    if (drilled.drill(scope, label)) push("drill");
+  };
+  const overview = useOverviewScreen({ open, drill, now });
   const sessions = useSessionsScreen({ deps, report, height, open });
-  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, detail };
+  const drilled = useSessionsScreen({ deps, report, height, open, drilled: true });
+  const screens: Record<ScreenId, ScreenModel> = { overview, sessions, drill: drilled, detail };
   models.current = screens;
   const current = screens[screen];
 
@@ -124,6 +131,7 @@ export function App({
       if (key.escape) return current.closeOverlay?.();
       return keys.current?.(input, key);
     }
+    if (key.escape && shown.current.length > 1) return show(shown.current.slice(0, -1));
     if (input === "q") return quit();
     if (input === "?") {
       keys.current = null;
@@ -132,7 +140,7 @@ export function App({
     if (input === "r") return archive.reread();
     if (input === "R") return archive.refresh();
     const tab = TABS.find((t) => t.key === input);
-    if (tab) return show(tab.id);
+    if (tab) return show([tab.id]);
     keys.current?.(input, key);
   });
 
@@ -167,7 +175,7 @@ export function App({
     current.render({ width, height, now, data, diagnostics: archive.diagnostics })
   );
   const tabs = TABS.map((t) => `${t.id === screen ? "▸" : " "} ${t.key} ${screens[t.id].title}`);
-  if (!isTab(screen)) tabs.push(`▸ ${current.title}`);
+  if (stack.length > 1) tabs.push(`▸ ${stack.slice(1).map((id) => screens[id].title).join(" › ")}`);
 
   return (
     <PaletteContext.Provider value={palette}>

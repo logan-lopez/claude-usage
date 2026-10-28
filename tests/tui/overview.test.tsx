@@ -3,7 +3,7 @@ import React from "react";
 import { render } from "ink-testing-library";
 import stringWidth from "string-width";
 import { BarChart } from "../../src/tui/components.tsx";
-import { limitsHistory } from "../../src/query.ts";
+import { limitsHistory, sessionPage } from "../../src/query.ts";
 import { fit } from "../../src/tui/text.ts";
 import { NOW, dependencies, mount, teardown, until } from "./helpers.tsx";
 
@@ -143,4 +143,112 @@ test("the Archive panel's span reads in UTC minutes, not raw ISO", async () => {
   const app = mount(deps);
   await until(() => app.frame().includes("Archive span"));
   expect(app.frame()).toMatch(/Archive span: \d{4}-\d\d-\d\d \d\d:\d\d → \d{4}-\d\d-\d\d \d\d:\d\d/);
+});
+
+const DAY = 86_400_000;
+const label = (day: number) => `${new Date(day * DAY).toISOString().slice(0, 10)} UTC`;
+const tabRow = (frame: string) => frame.split("\n")[2]!;
+
+test("Daily output drills into a day; Esc pops back through the stack with everything kept", async () => {
+  const { db, deps } = dependencies();
+  const today = Math.floor(NOW / DAY);
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  // The Sessions tab gets a filter of its own first; a drill must not touch it.
+  const first = sessionPage(db).rows[0]!;
+  await app.key("2");
+  await app.key("/");
+  await app.key(first.session_id);
+  await app.key("\r");
+  expect(app.frame()).toContain("1 matching");
+  await app.key("1");
+  await app.key("\u001b[Z");
+  expect(app.frame()).toContain("←→ day · Enter sessions");
+  expect(app.frame()).toContain(`▲ ${label(today)}, today (partial): 0 output tokens`);
+  for (let i = 0; i < 6; i++) await app.key("\u001b[D");
+  await app.key("\u001b[C");
+  const day = today - 5;
+  const expected = sessionPage(db, { scope: { since: day * DAY, until: (day + 1) * DAY } }).total;
+  expect(expected).toBe(3);
+  expect(app.frame()).toContain(`▲ ${label(day)}: 0 output tokens`);
+  await app.key("\r");
+  expect(tabRow(app.frame())).toContain(`▸ Sessions · ${label(day)}`);
+  expect(tabRow(app.frame()).split("▸").length).toBe(2);
+  expect(app.frame()).toContain(`In ${label(day)} · All`);
+  expect(app.frame()).toContain(`${expected} matching`);
+  expect(app.frame()).toContain("Esc back");
+  // Help says what the scope means.
+  await app.key("?");
+  expect(app.frame()).toContain(`Sessions · ${label(day)} help`);
+  expect(app.frame()).toContain("at least one request in its scope");
+  await app.key("\u001b");
+  // Esc pops back to Overview, with the panel and the day cursor kept.
+  await app.key("\u001b");
+  expect(tabRow(app.frame())).toContain("▸ 1 Overview");
+  expect(app.frame()).toContain("←→ day · Enter sessions");
+  expect(app.frame()).toContain(`▲ ${label(day)}: 0 output tokens`);
+  // Drill again, open Detail from the list, and Esc twice gets back to Overview.
+  await app.key("\r");
+  await app.key("j");
+  const selected = sessionPage(db, { scope: { since: day * DAY, until: (day + 1) * DAY } }).rows[1]!;
+  await app.key("\r");
+  expect(app.frame()).toContain(`ID: ${selected.session_id}`);
+  expect(tabRow(app.frame())).toContain(`▸ Sessions · ${label(day)} › Session Detail`);
+  await app.key("\u001b");
+  // Back on the drilled list, with its selection.
+  expect(tabRow(app.frame())).toContain(`▸ Sessions · ${label(day)}`);
+  await app.key("\r");
+  expect(app.frame()).toContain(`ID: ${selected.session_id}`);
+  await app.key("\u001b");
+  await app.key("\u001b");
+  expect(tabRow(app.frame())).toContain("▸ 1 Overview");
+  // 2 from a drilled list clears the stack to the Sessions tab, its own filter intact.
+  await app.key("\r");
+  await app.key("2");
+  expect(tabRow(app.frame())).toContain("▸ 2 Sessions");
+  expect(tabRow(app.frame())).not.toContain("·");
+  expect(app.frame()).toContain(`Search: ${first.session_id}`);
+  expect(app.frame()).toContain("1 matching");
+  // Esc on a tab does nothing.
+  await app.key("\u001b");
+  expect(tabRow(app.frame())).toContain("▸ 2 Sessions");
+});
+
+test("a drill whose read fails pushes nothing and reports", async () => {
+  const { deps } = dependencies();
+  const page = deps.page;
+  deps.page = (opts) => {
+    if (opts.scope) throw new Error("offline");
+    return page(opts);
+  };
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("\u001b[Z");
+  await app.key("\r");
+  expect(tabRow(app.frame())).toContain("▸ 1 Overview");
+  expect(tabRow(app.frame())).not.toContain("Sessions ·");
+  expect(app.frame()).toContain("Archive read failed; sessions not listed.");
+});
+
+test("keys in one chunk on Daily output drill to the day the cursor moved to, at 80×24", async () => {
+  const { deps } = dependencies();
+  const today = Math.floor(NOW / DAY);
+  const app = mount(deps, 80, 24);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("\u001b[Z");
+  expect(app.frame()).toContain("Panel 4/5: Daily output tokens");
+  // h that queue behind a frame arrive as one string, and each counts.
+  await app.key("hhhhh");
+  await app.key("\u001b[D");
+  expect(app.frame()).toContain(`▲ ${label(today - 6)}`);
+  await app.key("\u001b[C\r");
+  expect(tabRow(app.frame())).toContain(`▸ Sessions · ${label(today - 5)}`);
+  expect(app.frame()).toContain("3 matching");
+});
+
+test("the day marker sits under its bar", () => {
+  const chart = render(<BarChart values={[1, 2, 3, 4]} width={20} height={2} marker={2} />);
+  const rows = chart.lastFrame()!.split("\n");
+  // Four bars of 5 columns: 4 wide and a gap. The third starts at column 10.
+  expect(rows.at(-1)).toBe(`${" ".repeat(11)}▲`);
 });

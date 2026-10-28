@@ -1,7 +1,8 @@
 /** Overview: five panels, all visible at 110×36+, one at a time down to 80×24. */
 import React, { useMemo, useRef, useState } from "react";
 import { Box } from "ink";
-import type { Diagnostics, OverviewData } from "./data.ts";
+import { DAY, type Diagnostics, type OverviewData } from "./data.ts";
+import type { SessionScope } from "../query.ts";
 import {
   BarChart,
   Row,
@@ -39,21 +40,26 @@ type OverviewNav = {
   offsets: number[];
   /** Selected recent session by ID, so a reread cannot move the selection. */
   recentId: string | undefined;
+  /** Daily output's chosen UTC day by its start, so a reread at midnight cannot move it. */
+  day: number;
 };
-const initialOverviewNav: OverviewNav = {
+const initialOverviewNav = (now: number): OverviewNav => ({
   panel: RECENT,
   offsets: panels.map(() => 0),
   recentId: undefined,
-};
+  day: Math.floor(now / DAY) * DAY,
+});
 
-/** What ↑↓ and Enter do in each panel: only Recent sessions opens one; Daily output doesn't scroll. */
+/** What the panel keys do: Recent sessions opens one, Daily output drills into a day. */
 const PANEL_KEYS = [
   "↑↓ scroll · ",
   "↑↓ scroll · ",
   "↑↓ scroll · ",
-  "",
+  "←→ day · Enter sessions · ",
   "↑↓ select · Enter open · ",
 ];
+
+const isoDay = (ts: number) => new Date(ts).toISOString().slice(0, 10);
 
 const HELP = [
   "Tab and Shift+Tab move between the five panels. ↑↓ or j/k scroll the focused one, PageUp and PageDown by a page, Home and End to either end.",
@@ -62,6 +68,7 @@ const HELP = [
   "Archive runs the same checks as cusage doctor, minus the credential check: browsing never touches your credentials. The checks report what the archive shows, not whether the agents are healthy.",
   "Meters show the highest reading in each hour, not the current one. · is an hour with no reading; gaps are left as gaps, never filled in.",
   "Daily output is output tokens by UTC day, from your local archive. Days with none still show, and today is partial.",
+  "In Daily output, ←→ or h/l choose a day (▲ marks it) and Enter lists the sessions active that UTC day.",
   ...COST_MARKS,
 ];
 
@@ -182,10 +189,15 @@ function meterLines(data: OverviewData, compact: boolean): Line[] {
 /** Overview's model. Its navigation lives here so Detail can return to the same selection. */
 export function useOverviewScreen({
   open,
+  drill,
+  now,
 }: {
   open: (id: string | undefined) => void;
+  drill: (scope: SessionScope, label: string) => void;
+  /** The day cursor starts on this UTC day. */
+  now: number;
 }): ScreenModel {
-  const [nav, setNav] = useState(initialOverviewNav);
+  const [nav, setNav] = useState(() => initialOverviewNav(now));
   // What was last committed, so keys delivered in one stdin chunk each see the one before.
   const latest = useRef(nav);
   const update = (f: (n: OverviewNav) => OverviewNav) => {
@@ -209,6 +221,7 @@ export function useOverviewScreen({
         latest={latest}
         update={update}
         onOpen={open}
+        onDrill={drill}
       />
     ),
   };
@@ -224,6 +237,7 @@ function Overview({
   latest,
   update,
   onOpen,
+  onDrill,
 }: {
   data: OverviewData;
   diagnostics: Diagnostics | null;
@@ -234,6 +248,7 @@ function Overview({
   latest: React.RefObject<OverviewNav>;
   update: (f: (n: OverviewNav) => OverviewNav) => void;
   onOpen: (id: string | undefined) => void;
+  onDrill: (scope: SessionScope, label: string) => void;
 }) {
   const full = width >= FULL_MIN_WIDTH && height >= FULL_MIN_HEIGHT;
   const half = Math.floor(width / 2);
@@ -265,6 +280,11 @@ function Overview({
   const recentAt = (id: string | undefined) =>
     Math.max(0, data.recent.findIndex((r) => r.session_id === id));
   const selected = data.recent[recentAt(nav.recentId)]?.session_id;
+  /** The day cursor's bar; a day that has scrolled out of the 30 clamps to the nearest end. */
+  const dayAt = (day: number) => {
+    const i = data.daily.findIndex((d) => d.tsMs === day);
+    return i >= 0 ? i : day < data.daily[0]!.tsMs ? 0 : data.daily.length - 1;
+  };
   /** Each panel pages by what it shows: its viewport, or Recent sessions' table body. */
   const page = (panel: number) =>
     panel === RECENT ? tableBodyRows(size(panel)[1] - 1) : visibleRows(size(panel)[1] - 1);
@@ -280,6 +300,20 @@ function Overview({
       }));
     if (key.return) {
       if (n.panel === RECENT) onOpen(data.recent[recentAt(n.recentId)]?.session_id);
+      if (n.panel === DAILY) {
+        const day = data.daily[dayAt(n.day)]!.tsMs;
+        onDrill({ since: day, until: day + DAY }, `${isoDay(day)} UTC`);
+      }
+      return;
+    }
+    if (n.panel === DAILY) {
+      // h/l that queued behind a slow frame arrive as one string ("lll"); count them.
+      const step = key.leftArrow ? -1 : key.rightArrow ? 1 : /^(?:h+|l+)$/.test(input) ? (input[0] === "h" ? -input.length : input.length) : 0;
+      if (step)
+        update((n) => ({
+          ...n,
+          day: data.daily[Math.max(0, Math.min(data.daily.length - 1, dayAt(n.day) + step))]!.tsMs,
+        }));
       return;
     }
     const to = movement(input, key, page(n.panel));
@@ -327,9 +361,10 @@ function Overview({
               values={data.daily.map((d) => d.output_tokens)}
               width={w}
               height={Math.max(1, Math.min(5, h - 4))}
+              marker={dayAt(nav.day)}
             />
             <Row
-              text={`${new Date(data.daily[0]!.tsMs).toISOString().slice(0, 10)} → today (partial): ${num(data.daily.at(-1)!.output_tokens)} output tokens`}
+              text={`▲ ${isoDay(data.daily[dayAt(nav.day)]!.tsMs)} UTC${dayAt(nav.day) === data.daily.length - 1 ? ", today (partial)" : ""}: ${num(data.daily[dayAt(nav.day)]!.output_tokens)} output tokens`}
               width={w}
               tone="muted"
             />

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box } from "ink";
 import { Select, TextInput } from "@inkjs/ui";
-import type { CostRow, SessionRow, SessionSort } from "../query.ts";
+import type { CostRow, SessionRow, SessionScope, SessionSort } from "../query.ts";
 import { DAY, SessionBrowser, type TuiDependencies } from "./data.ts";
 import { Row, SessionTable } from "./components.tsx";
 import { movement, useKeys } from "./keys.ts";
@@ -67,25 +67,35 @@ const HELP = [
   ...COST_MARKS,
 ];
 
-/** Sessions' model: paged browsing state, plus the editor overlays it owns. */
+const DRILL_HELP = [
+  "This list is drilled from another screen: the sessions with at least one request in its scope, shown with whole-session totals. Esc goes back.",
+  "Search, filters and sort narrow it further. Clearing them keeps the scope.",
+];
+
+/**
+ * Sessions' model: paged browsing state, plus the editor overlays it owns. The shell calls it twice:
+ * the Sessions tab, and a `drilled` instance that starts empty and lists what `drill` scopes it to.
+ */
 export function useSessionsScreen({
   deps,
   report,
   height,
   open,
+  drilled = false,
 }: {
   deps: TuiDependencies;
   report: Report;
   height: number;
   open: (id: string | undefined) => void;
-}): ScreenModel {
+  drilled?: boolean;
+}): ScreenModel & { drill: (scope: SessionScope, label: string) => boolean } {
   const list = useSessions(deps, sessionRows(height), report);
   const [editor, setEditor] = useState<Editor | null>(null);
   return {
-    title: "Sessions",
-    hints:
-      "↑↓ select · Enter open · / search · f filters · s sort · r reread · R fetch · ? help · q quit",
-    help: HELP,
+    title: drilled ? `Sessions · ${list.label}` : "Sessions",
+    hints: `↑↓ select · Enter open · / search · f filters · s sort · ${drilled ? "Esc back · " : ""}r reread · R fetch · ? help · q quit`,
+    help: drilled ? [...DRILL_HELP, ...HELP] : HELP,
+    drill: list.drill,
     reload: list.reload,
     overlay: editor !== null,
     closeOverlay: () => setEditor(null),
@@ -104,6 +114,7 @@ export function useSessionsScreen({
       ) : (
         <SessionsScreen
           sessions={list}
+          scope={drilled ? list.label : undefined}
           archiveEmpty={!frame.data.inventory.requests}
           width={frame.width}
           height={frame.height}
@@ -121,12 +132,15 @@ function useSessions(
   report: Report,
 ) {
   const [filters, setFilters] = useState(initialFilters);
+  const [label, setLabel] = useState("");
   const [view, setView] = useState(emptyView);
   const browser = useRef<SessionBrowser | null>(null);
   // Refs track what was last committed, so repeated keys in one stdin chunk
   // and reloads from timers never act on a stale render.
   const latest = useRef(emptyView);
   const current = useRef(initialFilters);
+  /** What a drill scoped this list to; filters apply on top of it, and clearing them keeps it. */
+  const scope = useRef<SessionScope | undefined>(undefined);
 
   function show(b: SessionBrowser, index: number, scroll = latest.current.scroll) {
     b.page(Math.max(0, index));
@@ -150,13 +164,14 @@ function useSessions(
     latest.current = { rows, costs, total: b.total, selection, scroll: start };
     setView(latest.current);
   }
-  function create(f: Filters) {
+  function create(f: Filters, within = scope.current) {
     return new SessionBrowser(deps, {
       search: f.search,
       project: f.project || null,
       model: f.model || null,
       since: activitySince(f.activity, deps.now()),
       sort: f.sort,
+      scope: within,
     });
   }
   function attempt(message: string, action: () => void) {
@@ -179,8 +194,24 @@ function useSessions(
 
   return {
     filters,
+    label,
     view,
     selected: () => selectedId(latest.current),
+    /** List the sessions in `within`, with no filters. Returns whether the read succeeded. */
+    drill(within: SessionScope, name: string) {
+      if (
+        !attempt("Archive read failed; sessions not listed.", () =>
+          show(create(initialFilters, within), 0, 0),
+        )
+      )
+        return false;
+      scope.current = within;
+      current.current = initialFilters;
+      setFilters(initialFilters);
+      setLabel(name);
+      report.ok();
+      return true;
+    },
     apply(next: Filters) {
       if (
         attempt(
@@ -213,6 +244,7 @@ type Sessions = ReturnType<typeof useSessions>;
 
 function SessionsScreen({
   sessions,
+  scope,
   archiveEmpty,
   width,
   height,
@@ -221,6 +253,8 @@ function SessionsScreen({
   onEditor,
 }: {
   sessions: Sessions;
+  /** A drilled list's scope, named above the filters. */
+  scope?: string;
   archiveEmpty: boolean;
   width: number;
   height: number;
@@ -244,7 +278,7 @@ function SessionsScreen({
         width={width}
       />
       <Row
-        text={`${filters.activity} · sort ${filters.sort} ↓ · Filters select sessions; whole-session totals.`}
+        text={`${scope ? `In ${scope} · ` : ""}${filters.activity} · sort ${filters.sort} ↓ · Filters select sessions; whole-session totals.`}
         width={width}
         tone="muted"
       />

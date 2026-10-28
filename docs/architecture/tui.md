@@ -1,7 +1,7 @@
 # The explorer (TUI)
 
 `cusage-tui` is a separate Ink executable that browses the archive read-only through `query.ts`,
-with Overview, Sessions and Session Detail screens.
+with Overview and Sessions tabs, and a drilled Sessions list and Session Detail pushed over them.
 
 **Sources:** `src/tui.ts`, `src/tui/`, `patches/`
 
@@ -10,8 +10,8 @@ with Overview, Sessions and Session Detail screens.
 | File | Role |
 | --- | --- |
 | `src/tui.ts` | The entry: argv, theme detection, render |
-| `src/tui/App.tsx` | The shell only: header, tabs, status, key hints, help and global keys, all derived from the screen models |
-| `src/tui/screen.ts` | The screen contract: `ScreenModel`, `Frame` and `TABS` |
+| `src/tui/App.tsx` | The shell only: the screen stack, header, tabs, status, key hints, help and global keys, all derived from the screen models |
+| `src/tui/screen.ts` | The screen contract: `ScreenModel`, `Frame`, `TABS` and `ScreenId` |
 | `src/tui/useArchive.ts` | The archive lifecycle |
 | `src/tui/data.ts` | Opening the archive, the query-backed dependencies the screens read through, and the session page cache, which never evicts and is replaced on every filter change or reload |
 | `src/tui/overview.tsx`, `sessions.tsx`, `detail.tsx` | Each exports a hook returning its screen's `ScreenModel`, and renders that screen and owns its keys |
@@ -44,12 +44,33 @@ only on a successful read.
 **Screens.** Each screen module exports a hook (`useOverviewScreen`, `useSessionsScreen`,
 `useDetailScreen`) that returns a `ScreenModel` (`src/tui/screen.ts`) every render: its title and
 help context, footer hints, help lines, an optional `reload`, whether its own overlay owns the
-keyboard, and a `render(frame)`. `App` calls the three hooks in a fixed order and builds a
-`Record<ScreenId, ScreenModel>`. From it, and from `TABS`, it derives the tab bar, the digit keys,
-the footer hints, the help heading and lines, and the reload loop.
+keyboard, and a `render(frame)`. `App` calls the hooks in a fixed order (Detail, Overview, the
+Sessions tab, the drilled Sessions) and builds a `Record<ScreenId, ScreenModel>`. From it, and from
+`TABS`, it derives the tab bar, the digit keys, the footer hints, the help heading and lines, and
+the reload loop.
 
-- Detail is pushed, not a tab. `useDetailScreen` returns `open(id)` beside its model; the shell
-  pushes Detail when it succeeds, and Esc returns to the tab it came from.
+**The stack.** What's on screen is a stack whose bottom is a tab (`ScreenId` is a `TabId`,
+`"drill"` or `"detail"`). The paths are tab → Detail and tab → drill → Detail, and back the same
+way.
+
+- Esc on a pushed screen with no overlay open pops one level; the shell handles it, not the
+  screen. Esc on a tab does nothing.
+- A digit key clears the stack to that tab, from anywhere.
+- The tab bar shows the tabs, then each pushed screen's title (`▸ Sessions · 2026-10-21 UTC ›
+  Session Detail`).
+- Every change goes through the shell's `show`, which clears `keys.current` and reloads the new top
+  if it's stale.
+
+**Pushing.** The shell passes `open(id)` and `drill(scope, label)` to the tab hooks that need
+them. Each asks a hook to load first and pushes only if the read worked; a failed read reports
+through `report` and pushes nothing.
+
+- `useDetailScreen` returns `open(id)` beside its model.
+- `App` calls `useSessionsScreen` twice. The second, `drilled` instance starts empty and returns
+  `drill(scope, label)`, which lists the sessions in a `SessionScope` (`query.ts`) with no filters.
+  Its title is `Sessions · <label>`. Search, filters and sort apply on top of the scope, and
+  clearing them keeps it. Opening a drill never changes the Sessions tab's filters or selection.
+- Overview's Daily output is the first caller: Enter drills into the chosen UTC day.
 - Sessions owns its editors (search, filters, project, model, activity, sort). It renders the
   editor in place of the table while `overlay` is true; the shell only calls `closeOverlay` on
   Esc.
@@ -63,8 +84,10 @@ shell calls every render whichever screen is showing:
   commits one view object, tracked in a ref so repeated keys compose.
 - `useDetail` holds Detail's state, including the session id apart from the session, so one
   that disappears from the archive is found again if a later reread brings it back.
-- `useOverviewScreen` holds Overview's navigation: the focused panel, each panel's scroll, and
-  the recent-session selection by id rather than by index.
+- `useOverviewScreen` holds Overview's navigation: the focused panel, each panel's scroll, the
+  recent-session selection by id rather than by index, and Daily output's day cursor by UTC day
+  start, so a reread at midnight doesn't move it. A day that scrolls out of the 30 clamps to the
+  nearest end.
 
 After an archive change (the first read, a poll that sees a new `data_version`, the hourly tick,
 `r`) the shell calls `reload` on the screen that's showing and marks every other screen stale.
@@ -77,6 +100,12 @@ first page when it's first shown. Rereads keep the selection by id where possibl
 **Sessions.** Search, project, model and activity filters choose session identities. Displayed
 amounts stay whole-session totals, and costs are computed only for the session ids on screen,
 with the CLI's rate and provenance logic.
+
+- The activity filter is on each session's last activity, and project is a substring of the
+  session's own project.
+- A drill's `SessionScope` is different: a session is in it when one request matches both the
+  `[since, until)` range and the exact key, on the request's own column (through `tool_calls` for
+  a tool). That's what a group row of `attribution(by, { since, until })` counted.
 
 **Limits on Overview.** Scoped history filters the exact selected model before hourly peak
 aggregation: the binding `weekly_scoped` model first, otherwise the latest archived one.
@@ -114,9 +143,12 @@ light or dark palette.
 
 - **Adding a tab is three edits.** A screen module whose hook returns a `ScreenModel`, a row in
   `TABS` (its id and digit key), and one hook call in `App` added to the record. Everything else
-  (the tab bar, the digit key, hints, help, reload) follows from those. If the screen has its own
-  input or select, it reports it through `overlay` and `closeOverlay` instead of the shell
-  learning about it.
+  (the tab bar, the digit key, hints, help, reload) follows from those. A tab that lists sessions
+  for one of its rows takes `drill` from the shell, as Overview does, and calls
+  `drill(scope, label)` on Enter. If the screen has its own input or select, it reports it through
+  `overlay` and `closeOverlay` instead of the shell learning about it.
+- **A screen's `reload` runs only while it's showing, or just before it's shown.** A tab with a
+  slow aggregate query relies on it to keep that query off every other screen.
 - **React and Ink stay inside `src/tui.ts` and `src/tui/`.** See the
   [architecture overview](README.md#two-binaries).
 - **Screens get keys through the shell's single `useInput`, via `useKeys`, which registers in a

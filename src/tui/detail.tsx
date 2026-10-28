@@ -48,16 +48,14 @@ const HELP = [
 
 /**
  * Detail's model, pushed rather than tabbed. `open` loads a session and says whether Detail can
- * show it; the shell then pushes the screen, and `back` returns to where it came from.
+ * show it; the shell then pushes the screen, and its Esc pops back to where it came from.
  */
 export function useDetailScreen({
   deps,
   report,
-  back,
 }: {
   deps: TuiDependencies;
   report: Report;
-  back: () => void;
 }): ScreenModel & { open: (id: string | undefined) => boolean } {
   const viewer = useDetail(deps, report);
   return {
@@ -69,7 +67,7 @@ export function useDetailScreen({
     overlay: false,
     open: viewer.open,
     render: (frame) => (
-      <DetailScreen detail={viewer} width={frame.width} height={frame.height} onBack={back} />
+      <DetailScreen detail={viewer} width={frame.width} height={frame.height} />
     ),
   };
 }
@@ -141,12 +139,10 @@ function DetailScreen({
   detail,
   width,
   height,
-  onBack,
 }: {
   detail: Detail;
   width: number;
   height: number;
-  onBack: () => void;
 }) {
   const state = detail.state!;
   const { session, cost, section, dimension } = state;
@@ -165,7 +161,6 @@ function DetailScreen({
   );
   const max = scrollMax(rows, viewportHeight);
   useKeys((input, k) => {
-    if (k.escape) return onBack();
     if (k.tab) return detail.section(k.shift ? -1 : 1);
     if (k.leftArrow || k.rightArrow) return detail.dimension(k.leftArrow ? -1 : 1);
     const to = movement(input, k, visibleRows(viewportHeight));
