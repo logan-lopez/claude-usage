@@ -12,7 +12,10 @@ export interface ScreenModel {
   hints: string;
   /** This screen's lines for `?`: its keys, and what its marks mean. */
   help: string[];
-  /** Called after every archive change, keeping browsing state. */
+  /**
+   * Rereads after an archive change, keeping browsing state. The shell calls it only while the
+   * screen is showing, or just before it's shown again after a change passed it by.
+   */
   reload?: () => void;
   /** True while this screen's own input or select owns the keyboard. */
   overlay: boolean;

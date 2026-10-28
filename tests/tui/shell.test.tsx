@@ -187,23 +187,58 @@ test("the tab bar and digit keys come from TABS", async () => {
   expect(app.frame()).toBe(before);
 });
 
-test("every model's reload runs after a data_version change, shown or not", async () => {
-  const { deps, change } = dependencies();
+/** Counts each screen's reads: a Sessions reload is one page read on the fixture's 20 sessions. */
+function counted(deps: ReturnType<typeof dependencies>["deps"]) {
   const calls = { page: 0, detail: 0 };
   const page = deps.page;
   const detail = deps.detail;
   deps.page = (opts) => (calls.page++, page(opts));
   deps.detail = (id) => (calls.detail++, detail(id));
+  return calls;
+}
+
+test("only the screen that's showing reloads; a stale one reloads once when it's shown", async () => {
+  const { deps, counts, change } = dependencies();
+  const calls = counted(deps);
   const app = mount(deps);
   await until(() => app.frame().includes("Recent sessions"));
+  // Startup loads Overview only.
+  expect(calls).toEqual({ page: 0, detail: 0 });
   // Open Detail from Overview, then go back: Sessions and Detail are both off screen.
   await app.key("\r");
   expect(app.frame()).toContain("Session Detail");
   await app.key("\u001b");
   expect(app.frame()).toContain("Recent sessions");
   const before = { ...calls };
+  const reads = counts.overview;
   change();
-  await until(() => calls.page > before.page && calls.detail > before.detail);
+  await until(() => counts.overview > reads);
+  await settle();
+  expect(calls).toEqual(before);
+  // Sessions shows its first page when first shown, from one reload.
+  await app.key("2");
+  expect(calls.page).toBe(before.page + 1);
+  expect(app.frame()).toContain("20 matching");
+  await app.key("1");
+  await app.key("2");
+  expect(calls.page).toBe(before.page + 1);
+  // Detail was passed by too; opening it loads it fresh, with no reload on top.
+  await app.key("\r");
+  expect(calls.detail).toBe(before.detail + 1);
+});
+
+test("an archive change reloads the screen that's showing", async () => {
+  const { deps, counts, change } = dependencies();
+  const calls = counted(deps);
+  const app = mount(deps);
+  await until(() => app.frame().includes("Recent sessions"));
+  await app.key("2");
+  const before = calls.page;
+  const reads = counts.overview;
+  change();
+  await until(() => counts.overview > reads);
+  await settle();
+  expect(calls.page).toBe(before + 1);
 });
 
 test("help shows the screen's own lines, then the shell's, with its own footer", async () => {

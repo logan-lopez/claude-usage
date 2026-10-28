@@ -66,8 +66,13 @@ shell calls every render whichever screen is showing:
 - `useOverviewScreen` holds Overview's navigation: the focused panel, each panel's scroll, and
   the recent-session selection by id rather than by index.
 
-After every archive change the shell calls each model's `reload`, shown or not, so a screen can't
-miss one. Rereads keep the selection by id where possible.
+After an archive change (the first read, a poll that sees a new `data_version`, the hourly tick,
+`r`) the shell calls `reload` on the screen that's showing and marks every other screen stale.
+Showing a stale screen reloads it first, unless the caller has just loaded it (`open`). So a
+screen's `reload` runs only while it's showing or just before it's shown: `bun:sqlite` is
+synchronous, and a slow query on a hidden screen would freeze the one you're on. The shell still
+owns the loop, so a screen can't miss a change. On startup only Overview loads; Sessions reads its
+first page when it's first shown. Rereads keep the selection by id where possible.
 
 **Sessions.** Search, project, model and activity filters choose session identities. Displayed
 amounts stay whole-session totals, and costs are computed only for the session ids on screen,

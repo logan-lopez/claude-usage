@@ -66,31 +66,40 @@ export function App({
   const [origin, setOrigin] = useState<TabId>(TABS[0].id);
   const [help, setHelp] = useState(false);
   const keys = useRef<KeyHandler | null>(null);
-  // The models of the last render; an archive change reloads every one of them.
-  const models = useRef<ScreenModel[]>([]);
+  // The models of the last render, and the screens an archive change has passed by while hidden.
+  const models = useRef({} as Record<ScreenId, ScreenModel>);
+  const stale = useRef(new Set<ScreenId>());
+  // What's showing as last committed, for reloads from timers.
+  const shown = useRef(screen);
+  // Only the screen that's showing rereads; the rest wait until they're shown.
   const archive = useArchive(deps, () => {
-    for (const model of models.current) model.reload?.();
+    for (const id of Object.keys(models.current) as ScreenId[])
+      if (id !== shown.current) stale.current.add(id);
+    models.current[shown.current]?.reload?.();
   });
   const { data, now, report } = archive;
 
   /**
-   * Change what's on screen. The old screen's handler stays in `keys` until the next commit, so a
+   * Change what's on screen, rereading it first if an archive change passed it by; `fresh` says the
+   * caller has just loaded it. The old screen's handler stays in `keys` until the next commit, so a
    * key later in the same chunk would reach it; dropping that key is better than misrouting it.
    */
-  const show = (id: ScreenId) => {
+  const show = (id: ScreenId, fresh = false) => {
     keys.current = null;
+    if (stale.current.delete(id) && !fresh) models.current[id]?.reload?.();
+    shown.current = id;
     setScreen(id);
   };
   const detail = useDetailScreen({ deps, report, back: () => show(origin) });
   const open = (id: string | undefined) => {
     if (!detail.open(id)) return;
     if (isTab(screen)) setOrigin(screen);
-    show("detail");
+    show("detail", true);
   };
   const overview = useOverviewScreen({ open });
   const sessions = useSessionsScreen({ deps, report, height, open });
   const screens: Record<ScreenId, ScreenModel> = { overview, sessions, detail };
-  models.current = Object.values(screens);
+  models.current = screens;
   const current = screens[screen];
 
   const quit = () => {
