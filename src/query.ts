@@ -1235,10 +1235,15 @@ export function blocks(db: Database, opts: RequestFilters = {}) {
     previous = sample;
   }
   if (active) rows.push(active);
-  for (const row of rows) if (row.kind === "cycle") {
-    const w = requestWhere({ ...opts, since: row.startMs, until: row.endMs });
-    row.local = db.query(`SELECT ${TOTALS_SELECT} FROM requests WHERE ${w.sql}`).get(w.params) as TokenTotals;
-  }
+  // A plain range, not requestWhere: its `$since IS NULL OR` shape keeps SQLite off requests_ts,
+  // a full scan per cycle (1.6 s at 30 days on 93K requests). The project and model clauses are
+  // requestWhere's own, added only when that filter is set, so the totals are identical.
+  const local = db.query(`SELECT ${TOTALS_SELECT} FROM requests WHERE ts_ms >= $since AND ts_ms < $until${
+    opts.project != null ? " AND instr(lower(COALESCE(project,'')), lower($project)) > 0" : ""}${
+    opts.model != null ? " AND instr(lower(COALESCE(model,'')), lower($model)) > 0" : ""}`);
+  const filters = { ...(opts.project != null && { $project: opts.project }), ...(opts.model != null && { $model: opts.model }) };
+  for (const row of rows) if (row.kind === "cycle")
+    row.local = local.get({ $since: row.startMs, $until: row.endMs, ...filters }) as TokenTotals;
   const meta = reportMeta(db, opts);
   const covered = rows.reduce((n, r) => n + (r.local?.requests ?? 0), 0);
   return { since, until, source, setAside, lastSampleMs: meter.at(-1)?.ts_ms ?? null, samples: meter.length,

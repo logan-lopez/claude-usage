@@ -43,6 +43,10 @@ desktop history when available, otherwise live OAuth, otherwise cached OAuth.
 - Samples from the sources that lost the single-series choice are counted and reported, so
   set-aside observations don't read as missing data.
 - Local token columns sit beside each cycle as context, not as an explanation of the server meter.
+  Each cycle's totals are one plain `ts_ms` range query, with the project and model clauses only
+  when those filters are set: `requestWhere`'s `$since IS NULL OR` shape keeps SQLite off
+  `requests_ts`, which cost a full scan per cycle. `tests/blocks.test.ts` keeps the old
+  implementation as the parity oracle.
 
 ## Rules worth keeping
 

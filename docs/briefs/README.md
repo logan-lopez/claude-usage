@@ -41,7 +41,7 @@ that belong to a plan go under its heading.
    that's showing, `attribution --by tool` gets fast, and drill-down from Overview's Daily output.
 7. [`07-tui-breakdown-tab.md`](07-tui-breakdown-tab.md) (done, awaiting review): tab 3, tokens and exact-or-absent cost by
    any dimension over a window, with Enter drilling to the group's sessions.
-8. [`08-tui-timeline-and-limits-tabs.md`](08-tui-timeline-and-limits-tabs.md): `blocks()` fast with
+8. [`08-tui-timeline-and-limits-tabs.md`](08-tui-timeline-and-limits-tabs.md) (in progress): `blocks()` fast with
    identical output, then tab 4 Timeline (output bars per day, week or month, split by series, a
    book line) and tab 5 Limits (sources, zoomable history, five-hour cycles), each drilling.
 
