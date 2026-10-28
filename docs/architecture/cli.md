@@ -41,10 +41,11 @@ and machine output that never loads it.
 **Attribution.** `attribution --by agent|skill|plugin|mcp|effort|entrypoint|branch|version|model|tool`,
 defaulting to `agent`.
 
-- Tool attribution is two grouped passes over a `tool_calls`-to-`requests` join, not a query per
-  tool name.
-- Schema v3 added the `(session_id, message_id)` index on each side. Without them neither pass
-  could seek, and the view took 5.5 s.
+- Tool attribution is two flat scans grouped in JavaScript: the filtered requests summed per
+  `(session_id, message_id)`, then `tool_calls`, each tool taking a message once however many
+  calls it made there. It takes about 200 ms on 93K requests and 103K calls. In SQL, the
+  `DISTINCT` and correlated `EXISTS` over the join took 2.6 s, and the best `GROUP BY` shape about
+  490 ms, sorting the id strings. `tests/reports.test.ts` keeps the old SQL as a parity oracle.
 - Tool groups overlap, because a request can appear under several tools. They count calls, and
   their request-token columns are context, not per-tool consumption.
 

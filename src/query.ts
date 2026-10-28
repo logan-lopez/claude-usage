@@ -92,6 +92,12 @@ export interface SessionDetail {
   unknownModelCost: boolean;
 }
 
+/** `TokenTotals`' summed columns, in `TOTALS_SELECT`'s order. */
+const TOKEN_COLUMNS = [
+  "input_tokens", "output_tokens", "thinking_tokens", "cache_creation_tokens",
+  "cache_read_tokens", "ephemeral_5m", "ephemeral_1h", "total_tokens",
+] as const;
+
 const TOTALS_SELECT = `
   COUNT(*) AS requests,
   COALESCE(SUM(input_tokens), 0)          AS input_tokens,
@@ -835,28 +841,54 @@ export function attribution(db: Database, by: AttributionDimension, opts: Reques
   let rows: (BreakdownRow & { calls?: number })[];
   let attributed: number;
   if (by === "tool") {
-    // One request may carry several calls of one tool and several tools. The
-    // DISTINCT subquery keys on the full request primary key, so a request is
-    // counted once per tool it used and its tokens are never multiplied by the
-    // call count. Calls are counted separately because they are the one figure
-    // that legitimately exceeds the request count.
-    const pairs = `SELECT DISTINCT t.tool_name AS key, r.message_id, r.request_id, r.session_id,
-        r.input_tokens, r.output_tokens, r.thinking_tokens, r.cache_creation_tokens,
-        r.cache_read_tokens, r.ephemeral_5m, r.ephemeral_1h, r.total_tokens
-      FROM tool_calls t JOIN requests r ON r.session_id = t.session_id AND r.message_id = t.message_id
-      WHERE t.tool_name IS NOT NULL AND ${requestWhere(opts, "r").sql}`;
-    const tokens = db.query(`SELECT key, ${TOTALS_SELECT} FROM (${pairs}) GROUP BY key`)
-      .all(w.params) as BreakdownRow[];
-    const calls = new Map((db.query(`SELECT t.tool_name AS key, COUNT(*) AS n FROM tool_calls t
-      WHERE t.tool_name IS NOT NULL AND EXISTS (SELECT 1 FROM requests r
-        WHERE r.session_id = t.session_id AND r.message_id = t.message_id AND ${requestWhere(opts, "r").sql})
-      GROUP BY t.tool_name`).all(w.params) as { key: string; n: number }[]).map(r => [r.key, r.n]));
-    rows = tokens.map(row => ({ ...row, calls: calls.get(row.key) ?? 0 }));
-    // Requests reached by any tool at all: the sum of the rows above would
+    // One request may carry several calls of one tool and several tools. Each
+    // tool takes a message's requests once, however many calls it made there,
+    // so a request is counted once per tool it used and its tokens are never
+    // multiplied by the call count. Calls are counted separately because they
+    // are the one figure that legitimately exceeds the request count.
+    //
+    // Tool calls join requests on (session_id, message_id), and every request of
+    // a message carries that pair, so the filtered requests are summed per
+    // message first. The grouping is done here rather than in SQL: two flat
+    // scans and a Map take about 190 ms on 93K requests and 103K calls, where
+    // SQLite's DISTINCT and correlated EXISTS over the join took 2.6 s and its
+    // best GROUP BY shape about 490 ms, sorting the long id strings.
+    const byMessage = new Map<string, number[]>();
+    for (const r of db.query(`SELECT session_id, message_id, ${TOKEN_COLUMNS.join(", ")} FROM requests r
+      WHERE ${requestWhere(opts, "r").sql}`).values(w.params) as (string | number | null)[][]) {
+      const k = `${r[0]}\n${r[1]}`;
+      let sums = byMessage.get(k);
+      if (!sums) byMessage.set(k, (sums = new Array<number>(TOKEN_COLUMNS.length + 1).fill(0)));
+      sums[0]!++;
+      for (let i = 0; i < TOKEN_COLUMNS.length; i++) sums[i + 1]! += Number(r[i + 2] ?? 0);
+    }
+    const tools = new Map<string, { sums: number[]; calls: number; seen: Set<string> }>();
+    // Requests reached by any tool at all: the sum of the rows would
     // double-count a request that used more than one tool.
-    attributed = (db.query(`SELECT COUNT(*) n FROM (SELECT DISTINCT r.message_id, r.request_id, r.session_id
-      FROM tool_calls t JOIN requests r ON r.session_id = t.session_id AND r.message_id = t.message_id
-      WHERE t.tool_name IS NOT NULL AND ${requestWhere(opts, "r").sql})`).get(w.params) as { n: number }).n;
+    const reached = new Set<string>();
+    attributed = 0;
+    for (const [key, session, message] of db.query(`SELECT tool_name, session_id, message_id FROM tool_calls
+      WHERE tool_name IS NOT NULL AND message_id IS NOT NULL`).values() as [string, string, string][]) {
+      const k = `${session}\n${message}`;
+      const sums = byMessage.get(k);
+      if (!sums) continue;
+      let tool = tools.get(key);
+      if (!tool) tools.set(key, (tool = { sums: new Array(sums.length).fill(0), calls: 0, seen: new Set() }));
+      tool.calls++;
+      if (!tool.seen.has(k)) {
+        tool.seen.add(k);
+        for (let i = 0; i < sums.length; i++) tool.sums[i]! += sums[i]!;
+      }
+      if (!reached.has(k)) {
+        reached.add(k);
+        attributed += sums[0]!;
+      }
+    }
+    rows = [...tools].map(([key, { sums, calls }]) => ({
+      key, requests: sums[0]!,
+      ...Object.fromEntries(TOKEN_COLUMNS.map((c, i) => [c, sums[i + 1]!])) as Omit<TokenTotals, "requests">,
+      calls,
+    }));
   } else {
     const column = ATTRIBUTION_COLUMNS[by];
     if (!column) throw new Error("invalid attribution dimension");
