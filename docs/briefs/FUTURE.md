@@ -19,7 +19,7 @@ it. Cost, Doctor and Cache are under [Parked](#parked).
 
 Built: [brief 06](06-tui-tab-groundwork.md) (reload only what's shown, fast tool attribution,
 drill-down) and [brief 07](07-tui-breakdown-tab.md), Breakdown as tab 3. Timeline and Limits are
-still unscheduled.
+scheduled in [brief 08](08-tui-timeline-and-limits-tabs.md).
 
 ### Timeline
 
@@ -36,6 +36,8 @@ Enter on a bucket drills to the sessions active in it.
 - **Size:** S once brief 06 has landed.
 - **Kill criteria:** brief 06's day drill on Overview's Daily output already answers it, and you
   never zoom past 30 days.
+- **Scheduled:** [brief 08](08-tui-timeline-and-limits-tabs.md), as tab 4, with a book-comparison
+  line at the top (Logan, 2026-10-28).
 
 ### Limits
 
@@ -56,6 +58,23 @@ during it.
 - **Size:** M.
 - **Kill criteria:** you'd never leave the explorer on this tab rather than Overview. If so, a
   cycles panel on Overview gets most of it for S.
+- **Scheduled:** [brief 08](08-tui-timeline-and-limits-tabs.md), as tab 5, with the `blocks()`
+  speedup first.
+
+## Index-friendly request filters
+
+`requestWhere` (`src/query.ts`) writes every filter as `($since IS NULL OR ts_ms >= $since)`, which
+stops SQLite from using `requests_ts`: `EXPLAIN QUERY PLAN` shows `SCAN requests` even for a
+five-hour range (13 ms against 1 ms for a plain range, 2026-10-28). Brief 08 fixes this inside
+`blocks()` only, by Logan's call.
+
+- **Why:** every filtered report through `requestWhere` scans the whole table. Windowed reports
+  on a growing archive slow down with all of history, not with the window.
+- **Likely shape:** build the WHERE from the filters that are set, as bound parameters, with a
+  parity test per caller against the current SQL.
+- **Size:** M (ten call sites).
+- **Kill criteria:** no report through `requestWhere` other than `blocks` is slow enough to
+  notice.
 
 ## TUI mouse support and command prompt
 
