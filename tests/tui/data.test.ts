@@ -7,6 +7,9 @@ import {
   archiveDependencies,
   openArchive,
   dataVersion,
+  readTimeline,
+  TIMELINE_BUCKETS,
+  TIMELINE_SPLITS,
 } from "../../src/tui/data.ts";
 import { activitySince } from "../../src/tui/sessions.tsx";
 import {
@@ -16,6 +19,7 @@ import {
   limitsHistory,
   archiveStats,
   listSessions,
+  timeline,
 } from "../../src/query.ts";
 import { doctor } from "../../src/doctor.ts";
 import { costLabel } from "../../src/tui/text.ts";
@@ -246,4 +250,30 @@ test("a session scope finds sessions with one request matching all of it, with w
   expect(scoped).toEqual(session);
   expect(ids({ scope: { by: "project", key: "proj-08" }, search: "nothing-matches" })).toEqual([]);
   expect(() => sessionPage(db, { scope: { by: "nope" as "skill", key: "x" } })).toThrow("invalid scope dimension");
+});
+
+test("readTimeline: each bucket's totals are the unsplit timeline's, its rows the split's non-zero series", () => {
+  const { db } = dependencies();
+  for (const bucket of TIMELINE_BUCKETS) {
+    const all = timeline(db, { bucket, until: NOW }).rows;
+    for (const by of TIMELINE_SPLITS) {
+      const { buckets } = readTimeline(db, bucket, by, NOW);
+      expect(buckets.map((b) => b.tsMs)).toEqual(all.map((r) => r.tsMs));
+      expect(buckets.map((b) => b.output)).toEqual(all.map((r) => r.output_tokens));
+      for (const [i, b] of buckets.entries()) {
+        const { key: _, tsMs: __, ...totals } = all[i]!;
+        expect(b.total).toEqual(totals);
+        // Contiguous: each bucket ends where the next begins, and the last past `until`.
+        expect(b.endMs).toBe(buckets[i + 1]?.tsMs ?? b.endMs);
+        expect(b.rows.every((r) => r.requests > 0)).toBe(true);
+        expect(b.rows.reduce((n, r) => n + r.total_tokens, 0)).toBe(b.total.total_tokens);
+        const output = b.rows.map((r) => r.output_tokens);
+        expect(output).toEqual([...output].sort((x, y) => y - x));
+      }
+      expect(buckets.at(-1)!.endMs).toBeGreaterThan(NOW);
+      if (by) expect(buckets.some((b) => b.rows.length > 1)).toBe(true);
+    }
+  }
+  const months = readTimeline(db, "month", null, NOW).buckets;
+  expect(new Date(months.at(-1)!.endMs).toISOString()).toBe("2026-10-01T00:00:00.000Z");
 });

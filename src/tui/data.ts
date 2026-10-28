@@ -126,6 +126,60 @@ export function readBreakdown(db: Database, by: BreakdownDimension, opts: { sinc
       overlapping: report.overlapping, note: report.note, priced: false };
   })();
 }
+/** Timeline's buckets and splits, in `b` and `g` order. */
+export const TIMELINE_BUCKETS = ["day", "week", "month"] as const;
+export type TimelineBucket = (typeof TIMELINE_BUCKETS)[number];
+export const TIMELINE_SPLITS = [null, "model", "project", "effort"] as const;
+export type TimelineSplit = (typeof TIMELINE_SPLITS)[number];
+/** One bucket, `[tsMs, endMs)`: its totals, and its series with any requests, by output tokens. */
+export interface TimelineSlot {
+  tsMs: number;
+  endMs: number;
+  output: number;
+  total: query.TokenTotals;
+  rows: query.BreakdownRow[];
+}
+export interface TimelineData { buckets: TimelineSlot[] }
+/** The bucket boundary after `ms`, a bucket start: what `timeline()` steps by. */
+function nextBucket(ms: number, bucket: TimelineBucket) {
+  if (bucket !== "month") return ms + (bucket === "week" ? 7 : 1) * DAY;
+  const d = new Date(ms);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.getTime();
+}
+const TOTAL_KEYS = [
+  "requests", "input_tokens", "output_tokens", "thinking_tokens", "cache_creation_tokens",
+  "cache_read_tokens", "ephemeral_5m", "ephemeral_1h", "total_tokens",
+] as const satisfies readonly (keyof query.TokenTotals)[];
+/**
+ * Timeline's one read: every bucket from the first request to `now`. `timeline()` zero-fills every
+ * series in every bucket (365 a day by project), so only series with requests are kept.
+ */
+export function readTimeline(db: Database, bucket: TimelineBucket, by: TimelineSplit, now: number): TimelineData {
+  const rows = db.transaction(() => query.timeline(db, { bucket, by: by ?? undefined, until: now }).rows)();
+  const buckets: TimelineSlot[] = [];
+  for (const r of rows) {
+    let slot = buckets.at(-1);
+    if (slot?.tsMs !== r.tsMs) {
+      const total = Object.fromEntries(TOTAL_KEYS.map((k) => [k, 0])) as unknown as query.TokenTotals;
+      buckets.push((slot = { tsMs: r.tsMs, endMs: nextBucket(r.tsMs, bucket), output: 0, total, rows: [] }));
+    }
+    for (const k of TOTAL_KEYS) slot.total[k] += r[k];
+    slot.output = slot.total.output_tokens;
+    if (r.requests) slot.rows.push(r);
+  }
+  for (const slot of buckets) slot.rows.sort((a, b) => b.output_tokens - a.output_tokens || a.key.localeCompare(b.key));
+  return { buckets };
+}
+
+/** Limits' one read for a zoom: the meter history and the five-hour cycles since `since`. */
+export function readLimits(db: Database, since: number, bucketMs: number, now: number) {
+  return db.transaction(() => ({
+    history: query.limitsHistory(db, { since, until: now, bucketMs, nowMs: now }),
+    cycles: query.blocks(db, { since, until: now }),
+  }))();
+}
+export type LimitsData = ReturnType<typeof readLimits>;
 export type Diagnostics = Awaited<ReturnType<typeof doctor>>;
 export interface TuiDependencies {
   now: () => number;
@@ -136,6 +190,8 @@ export interface TuiDependencies {
   costs: (ids: string[]) => Record<string, query.CostRow>;
   detail: (id: string) => query.SessionDetail | null;
   breakdown: (by: BreakdownDimension, opts: { since: number | null }) => BreakdownData;
+  timeline: (bucket: TimelineBucket, by: TimelineSplit) => TimelineData;
+  limits: (since: number, bucketMs: number) => LimitsData;
   version: () => number;
   diagnostics: () => ReturnType<typeof doctor>;
   refresh: () => ReturnType<typeof refreshFromApi>;
@@ -155,6 +211,8 @@ export function archiveDependencies(
     costs: (ids) => query.sessionCosts(db, ids),
     detail: (id) => query.getSession(db, id),
     breakdown: (by, opts) => readBreakdown(db, by, opts),
+    timeline: (bucket, by) => readTimeline(db, bucket, by, Date.now()),
+    limits: (since, bucketMs) => readLimits(db, since, bucketMs, Date.now()),
     version: () => dataVersion(db),
     diagnostics: () => doctor(db, file, { archiveOnly: true }),
     pollMs: 5000,
