@@ -13,7 +13,7 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
 - Since 5A: the TUI split into modules with the keypress-latency fix (#4), a light or dark palette
   picked from the terminal background, and fallback-priced cost-state totals no longer counted as
   measured.
-- The installed binaries in `~/.local/bin` are current at `0566329` (`cusage doctor`: build ok).
+- The installed binaries in `~/.local/bin` are current at `2e52f1f` (`cusage doctor`: build ok).
 - Brief 04 is done, awaiting review and a commit. Project knowledge now lives in
   `docs/architecture/`, `docs/guide/`, a short root README and `AGENTS.md`, and OKF is gone.
 - Waiting on Logan: whether to regenerate the pricing calibration fixture, which predates
@@ -24,7 +24,10 @@ and move to `archive/` when they're done. Ideas that aren't scheduled yet are in
 - Brief 07, the Breakdown tab (tab 3, any dimension over a window, drilling to its sessions), is
   done, awaiting review. Its report asks whether `+` on nearly every live project and model row
   reads clearly.
-- Next: brief 08, the Timeline and Limits tabs (tabs 4 and 5), after `blocks()` gets fast.
+- Brief 08, the Timeline and Limits tabs (tabs 4 and 5) and a `blocks()` 19× faster at 30 days,
+  is done, awaiting review. Its report asks Logan for the kill criteria on both tabs.
+- Next: nothing scheduled. Every tab in `FUTURE.md` § Further TUI tabs is built; Index-friendly
+  request filters is the next candidate there.
 
 ## Open
 
@@ -41,7 +44,7 @@ that belong to a plan go under its heading.
    that's showing, `attribution --by tool` gets fast, and drill-down from Overview's Daily output.
 7. [`07-tui-breakdown-tab.md`](07-tui-breakdown-tab.md) (done, awaiting review): tab 3, tokens and exact-or-absent cost by
    any dimension over a window, with Enter drilling to the group's sessions.
-8. [`08-tui-timeline-and-limits-tabs.md`](08-tui-timeline-and-limits-tabs.md) (in progress): `blocks()` fast with
+8. [`08-tui-timeline-and-limits-tabs.md`](08-tui-timeline-and-limits-tabs.md) (done, awaiting review): `blocks()` fast with
    identical output, then tab 4 Timeline (output bars per day, week or month, split by series, a
    book line) and tab 5 Limits (sources, zoomable history, five-hour cycles), each drilling.
 
@@ -82,6 +85,7 @@ Don't relitigate these. If one turns out to be wrong in practice, stop and say s
 | Grouped cost read | `groupSessions` reads each (session, group) pair with its lifetime counts and measured cost in one statement; the old per-session loop is the parity oracle in `tests/query.test.ts` | Three queries per session took about 330 ms for project over 30 days on 93K requests, over Breakdown's 300 ms line; one statement takes about 230 ms, identical on the live archive. ([Cost page](../architecture/cost.md), brief 07) |
 | TUI Timeline | Bars of output tokens with a ▲ cursor; the split by model, project or effort is a table of the cursor's bucket, not stacked bars; no cost column; one book-comparison line at the top | Cache reads are 97.9% of total tokens, so total bars chart context size. 365 projects and the WCAG palette test rule out per-series colours. Cost by day reads $0.00 today. (Logan, 2026-10-28, brief 08) |
 | `blocks()` speed | Fixed inside `blocks()` only, deep-equal to the old code; `requestWhere` untouched | Its `$x IS NULL OR` shape defeats `requests_ts`, one full scan per cycle: 1557 ms at 30 days. Fixing every caller is in `FUTURE.md`. (Logan, 2026-10-28, brief 08) |
+| TUI tab bar | When the tabs and a drilled title don't fit the width, every tab but the stack's bottom one shrinks to its digit | Five tabs and `▸ Sessions · 2026-09-06 UTC` don't fit 80 columns; truncating the title hid where you are. (brief 08) |
 | Content | Never ingested: tool names and token counts only; credentials read once, never stored | Privacy. (`CLAUDE.md`, README) |
 
 ## Not built
@@ -93,8 +97,7 @@ What's deliberately absent, so nobody flags it as missing. Point at `FUTURE.md` 
 - `cusage pricing --refresh`.
 - claude.ai and Desktop chat usage: it isn't on disk. The seven-day meter can't be derived from
   local data (r=0.04 against local tokens).
-- TUI tabs beyond Overview, Sessions and Breakdown (Timeline and Limits are brief 08), and mouse
-  support: see [`FUTURE.md`](FUTURE.md).
+- TUI mouse support: see [`FUTURE.md`](FUTURE.md).
 - A Cost, Doctor or Cache tab, a TUI command prompt, and sorting Sessions by cost: parked in
   [`FUTURE.md`](FUTURE.md#parked), each with why.
 

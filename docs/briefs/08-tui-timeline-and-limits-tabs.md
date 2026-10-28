@@ -322,3 +322,173 @@ A commit per step is fine. No stop for review between steps.
     the report's follow-ups, not a revert.
 
 Then stop. Write the report, and ask Logan before merging anything.
+
+## Report
+
+Built 2026-10-28 on `main`: `9b5ab32` (this brief, written in an earlier session and left
+uncommitted, committed on its own first), `28d40b4` (step 1), `c7e5559` (step 2), `edc8106`
+(step 3), `a5713ca` (step 4), `2e52f1f` (step 5, docs), then this report.
+
+### Built
+
+- **`blocks()`** (`src/query.ts`): each cycle's local totals are one prepared plain
+  `ts_ms >= $since AND ts_ms < $until` query, with `requestWhere`'s own project and model clauses
+  added only when that filter is set (`!= null`, so `project: ""` still matches everything).
+  `requestWhere`, `reportMeta` and every other caller are untouched. I chose the per-cycle plain
+  range over a single sweep because it's the smaller change and already well under the line, so I
+  didn't build the sweep to measure it.
+- **The parity oracle** (`tests/blocks.test.ts`): the pre-brief `blocks()` verbatim, with
+  `requestWhere`'s SQL inlined. It runs on the fixture with desktop history backfilled, plus one
+  planted request on each active cycle's `endMs`, so a boundary off by one changes some totals
+  under every filter. Cases: no options (clock pinned with `setSystemTime`), `since`,
+  `since` + `until`, a `since` inside a cycle, `project`, `model`, all together, and empty strings.
+- **Data** (`src/tui/data.ts`): `readTimeline(db, bucket, by, now)` groups `timeline()`'s rows into
+  `{ tsMs, endMs, output, total, rows }` per bucket, keeping only series with requests, by output
+  tokens. `readLimits(db, since, bucketMs, now)` reads `limitsHistory` and `blocks` in one
+  transaction. Both are in `TuiDependencies` and the test fake, which counts their reads.
+- **Limits** (`src/tui/limits.tsx`, tab 5):
+  - **Now** comes from `frame.data.limits`, with ages from `frame.now`.
+  - **History** zooms to 72 hours (hourly), 7 days or 30 days with ←→.
+  - **Cycles** are `blocks()` over the zoom, newest first, with gap rows, and Enter drills a cycle.
+  - At 36 rows and up the three stack, and the cycles take at least five rows. Below that, Tab
+    switches between Now and History.
+  - `limitsLines` and `meterLines` moved to `src/tui/readings.ts` and take the readings rather
+    than `OverviewData`. Overview renders the same: its sources keep the one-line ages form, and
+    Limits asks for `sources: "table"`.
+- **Timeline** (`src/tui/timeline.tsx`, tab 4) and **`src/tui/books.ts`**:
+  - Output bars all time, with a ▲ cursor that scrolls the chart back past the left edge.
+  - `b` cycles day, week and month; `g` cycles the split.
+  - The table is the cursor's bucket, `all` first. Enter drills the bucket or a series.
+  - The book line sits at the top.
+  - `BarChart` gains `partial` (default true, so Overview is unchanged).
+- **Shell** (`src/tui/screen.ts`, `src/tui/App.tsx`): two `TABS` rows and two hook calls, plus the
+  tab-bar change under Deviations.
+- **PTY smoke** (`tools/tui-pty-smoke.py`): a leg for each new tab. Timeline: `4`, `b` to weeks,
+  Enter, Esc. Limits: `5`, → to 7 days, Enter, Esc.
+
+### Deviations
+
+- **The shell changed beyond three edits per tab.** Five tabs plus a drilled title don't fit 80
+  columns: `▸ Sessions · 2026-09-06 UTC` was cut to `202…`, and four existing tests failed on it.
+  When the tab row is wider than the terminal, every tab but the stack's bottom one now shrinks to
+  its digit. I added this to the decisions table.
+- **A shell test** that pressed `String(TABS.length + 1)` as "a digit with no tab" now picks the
+  first free digit. It pressed `5` while Limits existed and Timeline didn't.
+- **`TimelineSlot` carries `total`** beside `tsMs`, `endMs`, `output` and `rows`. The `all` row
+  needs the bucket's totals, and an unsplit bucket has no series rows to sum.
+- **`b` keeps the cursor's own start, not the coarser bucket's.** Going coarser, the result is
+  what the brief says: the bucket that contains the old start. Going back finer, it returns to the
+  day you chose rather than the first day of the week or month. So the round-trip acceptance item
+  holds for any day.
+- **Bars are capped at four columns.** `BarChart` spreads its bars across the width, so three
+  weekly bars were 39 columns each on the fixture.
+- **Footer hints.** Timeline is `←→ bucket · ↑↓ row · b d/w/m · g split · Enter sessions · ? help ·
+  q quit` (73 columns). The spelled-out `b day/week/month` made 82. Limits keeps `R fetch` and
+  drops nothing when stacked (74). In compact mode it drops `r reread` (77 on History, 57 on Now).
+- **Limits in compact mode starts on Now**, ↑↓ scrolls it there, and Enter does nothing on Now.
+  The sparklines put each bar row under its label below 110 columns, as Overview's compact mode
+  does, because 72 hourly bars don't fit beside a label at 80.
+- **The architecture page changed in step 5**, with the guide, as the build order put it, rather
+  than in each code commit.
+- **The smoke archive** is the fixture ingested into the scratchpad, with desktop history
+  backfilled and shifted so its newest sample is an hour old. The PTY run uses the real clock, and
+  the fixture's samples end in September, so none of the three zooms had a cycle to drill.
+
+### Defaults taken
+
+- **Book line tokens:** output tokens; help says so.
+- **Tokens per word:** 1.3, `TOKENS_PER_WORD` in `books.ts`. The line says `≈`.
+- **Books:** the four in the brief, smallest first. The word counts are round figures inside the
+  brief's ranges: 30,000, 47,000, 207,000 and 565,000.
+- **Tab order:** Timeline `4`, Limits `5`.
+- **Limits at 80×24:** Tab switches Now and History below 36 rows; at 36 and up they stack.
+- **The caveat:** above the cycles table and in help. The drilled list carries only its label.
+
+### Acceptance
+
+- **`bun test`: 191 pass, 0 fail.**
+  - **`blocks()` parity:** deep-equal on all eight cases. Each filter changes the cycles' local
+    totals, and an oracle widened to `endMs + 1` differs on every case. By hand, mutating
+    `src/query.ts` to `endMs + 1` failed 2 tests, and dropping the model clause failed 1.
+  - **The tabs:** `4` and `5` show them with their titles in the tab bar and help. An archive
+    change while one is hidden doesn't read it, and showing it then reads once.
+  - **Timeline:**
+    - `b` and `g` cycle.
+    - On each bucket in turn, the ▲ line equals `timeline()`'s output tokens. The book line's
+      total equals the visible buckets' sum (all of them fit at 120 columns).
+    - The table's rows are the bucket's non-zero series, and `all` equals its totals.
+    - Cache-read share matches the formula on one fixture bucket.
+    - The cursor keeps its bucket across `r` and across a day → week → month → day round trip.
+    - Enter on `all`, on a series and on `(unknown)` (`key: null`) each lists exactly
+      `sessionPage({ scope })`'s sessions, and Esc returns to the same bucket and row.
+    - Scrolling back past the left edge was tested with the clock moved 60 days.
+    - `bookLine`: each threshold, the book just under it, fractions, and multiples past *War and
+      Peace*.
+
+    The bars were checked through the ▲ line and the book line, not by reading bar heights.
+  - **Limits:**
+    - Now shows each meter's source and age, all four sources with their figures (glaze marked
+      not reconciled, the stale cache marked `STALE`), and one disagreement for two current
+      sources 14 points apart, on an in-memory archive. The stale cache's 14-point gap is not one.
+    - ←→ cycles the zooms, and each one's cycles equal `blocks()` for its `since`.
+    - Enter on a cycle with local requests lists `sessionPage({ scope })`'s sessions; Enter on a
+      gap does nothing.
+    - The selection is kept by `startMs` across `r` when a newer cycle appears.
+  - **Chunks:** `"\x1b[B\r"` drills the second row on both tabs. Limits is tested at 80×24 and
+    120×40, Timeline at 80×24.
+- **`bun run typecheck`:** clean.
+- **Live timing**, read-only, 93,332 requests, median of five:
+  - `blocks`, before → after: 7 days 618 → 53 ms, 30 days 2449 → 129 ms, all time 4542 → 42 ms.
+    The live parity run is identical as JSON at all three. Of the 129 ms at 30 days, 42 is
+    `reportMeta`'s coverage count through `requestWhere`, which the brief leaves alone.
+  - The Limits read: 72 hours 27 ms, 7 days 57–67 ms, 30 days 123–125 ms, at both chart widths.
+  - The Timeline read, by split (none, model, project, effort): day 146, 144, 141 and 114 ms;
+    week 141, 171, 149 and 138 ms; month 132, 148, 144 and 133 ms.
+- **Footer hints fit 80 columns:** 73 (Timeline); 74, 77 and 57 (Limits).
+- **`make build`, then `python3 tools/tui-pty-smoke.py <scratchpad>/smoke.db`:** PASS for `bun
+  src/tui.ts` and for `dist/cusage-tui`, with both new legs.
+- **`make install`, then `cusage doctor`:** `build ok` at `2e52f1f`. The first install read
+  `dirty checkout` because this report was uncommitted, so I stashed it and installed again.
+- **Docs:** see below.
+
+### Size
+
+Sized L, this session M (22 active min, 22 wall, 0 compactions).
+
+### Spot checks for Logan
+
+In kitty, with the installed `cusage-tui` (current at `2e52f1f`):
+
+- **Timeline.** `4`, then `b` to month and back. Does the shape match what you remember? Pick a
+  spike, `g` to model, Enter on the top series. Are those the sessions behind it?
+- **The book line.** Does the comparison read well, and are these the books you want?
+- **Limits.** `5`, and leave it open while you work. Do the ages tick, and does a new reading show
+  up without a key? Zoom to 30 days: are the cycles plausible next to the sparkline?
+- **The tab bar while drilled** at 80 columns: the other tabs shrink to digits. Is it readable?
+- **Kill criteria** (`FUTURE.md`): would you leave the explorer on Limits rather than Overview?
+  Does Timeline tell you anything Daily output and its day drill didn't?
+
+### Docs updated
+
+- [The TUI page](../architecture/tui.md): the intro, the file table (`timeline.tsx`, `limits.tsx`,
+  `readings.ts`, `books.ts`), the hook list and call order, the tab bar's shortening, Pushing, a
+  section each for Timeline and Limits, and a rule that Limits' readings come from the frame.
+- [The limits page](../architecture/limits.md): how `blocks` reads its local totals, and the
+  oracle.
+- [The explorer guide](../guide/explorer.md): screens 4 and 5, their keys, the book line and what
+  it counts, the tab bar, and the limits page on its Covers line.
+- [Over time](../guide/over-time.md) and [Limits](../guide/limits.md): a pointer to the tab each.
+- The guide index line, and the root README's explorer line.
+- [`FUTURE.md`](FUTURE.md): Further TUI tabs says all three are built, and Timeline and Limits each
+  say **Built**. Their kill criteria stay for Logan. `wrap` can move the section out.
+
+### Follow-ups
+
+- **`blocks()`' coverage count** still scans through `requestWhere` (42 of 129 ms at 30 days).
+  [`FUTURE.md`](FUTURE.md) § Index-friendly request filters covers it.
+- **Limits doesn't reread on a resize.** The history bucket is chosen for the width at read time
+  and stays until the next zoom change or archive change, so a much narrower terminal truncates
+  the sparkline until then.
+- **At 80×24, Limits' History panel leaves the cycles table four rows.** The five-row minimum
+  holds only when stacked.
+- **Kill criteria:** Logan's answers go here.
