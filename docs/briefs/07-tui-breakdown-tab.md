@@ -1,6 +1,8 @@
+---
+size: M
+status: awaiting-review
+---
 # Brief 07: The Breakdown tab
-
-**Size:** M
 
 Read `CLAUDE.md`, [`README.md`](README.md), [the TUI page](../architecture/tui.md), [the cost
 page](../architecture/cost.md) (grouped cost), [the sessions guide page](../guide/sessions.md)

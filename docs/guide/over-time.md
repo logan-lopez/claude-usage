@@ -1,9 +1,10 @@
+---
+covers: ["docs/architecture/cli.md", "docs/architecture/limits.md"]
+---
 # Over time
 
 Token totals by day, week or month; the five-hour cycles the server's meter went through; and how
 much of your input came from the cache.
-
-**Covers:** [CLI](../architecture/cli.md), [Limits](../architecture/limits.md)
 
 ## Daily, weekly, monthly
 

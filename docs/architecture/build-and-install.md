@@ -1,9 +1,10 @@
+---
+sources: ["tools/build.ts", "src/version.ts", "Makefile", "launchd/", "scripts/"]
+---
 # Build and install
 
 cusage ships as two self-contained executables in `~/.local/bin`, and two launchd agents run the
 CLI from there. Neither the checkout nor `node_modules` is needed at run time.
-
-**Sources:** `tools/build.ts`, `src/version.ts`, `Makefile`, `launchd/`, `scripts/`
 
 **History:** [brief 02](../briefs/archive/02-cli-reports-and-binaries.md)
 

@@ -1,9 +1,10 @@
+---
+sources: ["src/cli.ts", "src/args.ts", "src/format.ts", "src/serialize.ts", "src/doctor.ts", "src/time.ts", "src/query.ts"]
+---
 # The CLI and its reports
 
 `cusage` is a Commander program over `query.ts`. Each command has a human rendering in `format.ts`
 and machine output that never loads it.
-
-**Sources:** `src/cli.ts`, `src/args.ts`, `src/format.ts`, `src/serialize.ts`, `src/doctor.ts`, `src/time.ts`, `src/query.ts`
 
 **History:** [brief 01](../briefs/archive/01-archiver-and-session-views.md),
 [brief 02](../briefs/archive/02-cli-reports-and-binaries.md)

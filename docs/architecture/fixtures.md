@@ -1,10 +1,11 @@
+---
+sources: ["tools/make-fixture.ts", "fixtures/", "tests/fixture.test.ts", "tests/helpers.ts"]
+---
 # Fixtures and the test suite
 
 Every numeric assertion runs against `fixtures/`, a frozen and scrubbed copy of 24 real
 transcripts that is committed. The expected numbers come from a second, independent dedup
 implementation. The suite never touches live data or the network.
-
-**Sources:** `tools/make-fixture.ts`, `fixtures/`, `tests/fixture.test.ts`, `tests/helpers.ts`
 
 **History:** [brief 01](../briefs/archive/01-archiver-and-session-views.md)
 

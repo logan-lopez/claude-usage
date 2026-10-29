@@ -1,9 +1,10 @@
+---
+covers: ["docs/architecture/limits.md", "docs/architecture/cost.md", "docs/architecture/ingest.md", "docs/architecture/cli.md"]
+---
 # Trusting the numbers
 
 What cusage's figures can and can't tell you, and what it will never do. Read this before
 quoting a number.
-
-**Covers:** [Limits](../architecture/limits.md), [Cost](../architecture/cost.md), [Ingest](../architecture/ingest.md), [CLI](../architecture/cli.md)
 
 ## What it will never do
 

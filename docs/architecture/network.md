@@ -1,10 +1,11 @@
+---
+sources: ["src/oauth.ts", "src/statusline.ts", "tests/refresh.test.ts"]
+---
 # Network
 
 cusage contacts one endpoint, `GET https://api.anthropic.com/api/oauth/usage`, behind a floor of
 3 minutes between attempts that holds across processes. It does so because `weekly_scoped`, the
 limit that usually binds, exists on disk only in a cache Claude Code rarely refreshes.
-
-**Sources:** `src/oauth.ts`, `src/statusline.ts`, `tests/refresh.test.ts`
 
 **History:** [brief 02](../briefs/archive/02-cli-reports-and-binaries.md)
 

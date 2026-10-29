@@ -1,7 +1,9 @@
+---
+size: L
+size-note: "Five separate pieces of work (the screen model, the layout math, per-screen help, the test split, and the quirk fixes), each mechanical but each touching most of `src/tui/`."
+status: awaiting-review
+---
 # Brief 05: TUI cleanup pass
-
-**Size:** L. Five separate pieces of work (the screen model, the layout math, per-screen help, the
-test split, and the quirk fixes), each mechanical but each touching most of `src/tui/`.
 
 Read `CLAUDE.md`, [`README.md`](README.md), [the TUI page](../architecture/tui.md), [the explorer
 guide page](../guide/explorer.md) and [`FUTURE.md`](FUTURE.md) § Further TUI tabs first. There are

@@ -1,9 +1,10 @@
+---
+covers: ["docs/architecture/ingest.md", "docs/architecture/build-and-install.md", "docs/architecture/cli.md"]
+---
 # The archive
 
 cusage copies your Claude usage into a SQLite archive you own, before Claude Code and the desktop
 app delete it, and every report reads from that archive.
-
-**Covers:** [Ingest](../architecture/ingest.md), [Build and install](../architecture/build-and-install.md), [CLI](../architecture/cli.md)
 
 ## Why it exists
 

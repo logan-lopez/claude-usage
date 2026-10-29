@@ -1,9 +1,10 @@
+---
+covers: ["docs/architecture/limits.md", "docs/architecture/network.md"]
+---
 # Limits
 
 `cusage limits` shows the server's usage limits with where each number came from and how old it
 is, including the per-model weekly limit the menu-bar tray doesn't show.
-
-**Covers:** [Limits](../architecture/limits.md), [Network](../architecture/network.md)
 
 ## The current reading
 

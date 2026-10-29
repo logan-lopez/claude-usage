@@ -1,11 +1,12 @@
+---
+covers: ["docs/architecture/tui.md", "docs/architecture/cost.md", "docs/architecture/limits.md"]
+---
 # The explorer
 
 `cusage-tui` is a full-screen terminal browser for the archive: an Overview of limits and
 activity, a searchable list of sessions, where the tokens went by project, skill, tool or any other
 dimension, output over days, weeks or months, the limits and their five-hour cycles, the sessions
 behind a day, a group, a bucket or a cycle, and each session in detail.
-
-**Covers:** [TUI](../architecture/tui.md), [Cost](../architecture/cost.md), [Limits](../architecture/limits.md)
 
 ## Starting it
 

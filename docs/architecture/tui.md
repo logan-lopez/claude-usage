@@ -1,10 +1,11 @@
+---
+sources: ["src/tui.ts", "src/tui/", "patches/"]
+---
 # The explorer (TUI)
 
 `cusage-tui` is a separate Ink executable that browses the archive read-only through `query.ts`,
 with Overview, Sessions, Breakdown, Timeline and Limits tabs, and a drilled Sessions list and
 Session Detail pushed over them.
-
-**Sources:** `src/tui.ts`, `src/tui/`, `patches/`
 
 **History:** [brief 03](../briefs/archive/03-ink-tui-session-explorer.md)
 

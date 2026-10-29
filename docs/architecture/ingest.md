@@ -1,9 +1,10 @@
+---
+sources: ["src/ingest.ts", "src/schema.ts", "src/paths.ts"]
+---
 # Ingest and the archive
 
 Transcripts and their cost-state records are copied into SQLite, deduplicated as they go, before
 Claude Code garbage collects them. Everything else reads what this writes.
-
-**Sources:** `src/ingest.ts`, `src/schema.ts`, `src/paths.ts`
 
 **History:** [brief 01](../briefs/archive/01-archiver-and-session-views.md),
 [brief 02](../briefs/archive/02-cli-reports-and-binaries.md)

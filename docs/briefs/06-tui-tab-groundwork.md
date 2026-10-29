@@ -1,7 +1,9 @@
+---
+size: M
+size-note: "Three pieces (reload what's shown, a fast tool-attribution query, drill-down), each small, in the shell, `query.ts` and Sessions."
+status: awaiting-review
+---
 # Brief 06: Groundwork for new TUI tabs
-
-**Size:** M. Three pieces (reload what's shown, a fast tool-attribution query, drill-down), each
-small, in the shell, `query.ts` and Sessions.
 
 Read `CLAUDE.md`, [`README.md`](README.md), [the TUI page](../architecture/tui.md), [the CLI
 page](../architecture/cli.md) (for `query.ts`), [the explorer guide page](../guide/explorer.md),

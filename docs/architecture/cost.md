@@ -1,3 +1,6 @@
+---
+sources: ["src/pricing.ts", "src/pricing-snapshot.json", "tools/refresh-pricing.ts", "tools/make-pricing-calibration.ts", "src/query.ts"]
+---
 # Pricing and cost
 
 Cost has two bases that are never added together:
@@ -6,8 +9,6 @@ Cost has two bases that are never added together:
 - **Estimated**, from an explicit price table applied to token counts.
 
 Grouped views report measured cost exactly or not at all.
-
-**Sources:** `src/pricing.ts`, `src/pricing-snapshot.json`, `tools/refresh-pricing.ts`, `tools/make-pricing-calibration.ts`, `src/query.ts`
 
 **History:** [brief 02](../briefs/archive/02-cli-reports-and-binaries.md)
 

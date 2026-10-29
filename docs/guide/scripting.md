@@ -1,8 +1,9 @@
+---
+covers: ["docs/architecture/cli.md"]
+---
 # Scripting
 
 Every report can come out as JSON or CSV instead of a table, and `export` streams raw archive rows.
-
-**Covers:** [CLI](../architecture/cli.md)
 
 ## Output formats
 

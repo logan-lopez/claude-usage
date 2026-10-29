@@ -1,6 +1,9 @@
+---
+size: L
+size-note: "Docs only, but about twenty pages plus a code check of each."
+status: awaiting-review
+---
 # Brief 04: Move the project's knowledge onto the layout
-
-**Size:** L. Docs only, but about twenty pages plus a code check of each.
 
 Read `CLAUDE.md`, [`README.md`](README.md), `~/.claude/skills/brief/LAYOUT.md` (Project knowledge,
 Architecture pages, The guide, The root README, The Areas table and rules) and

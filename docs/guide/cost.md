@@ -1,9 +1,10 @@
+---
+covers: ["docs/architecture/cost.md"]
+---
 # Cost
 
 cusage shows what your usage would have cost on the API, two ways: measured, from Claude Code's
 own per-session cost record, and estimated, from a price table. It never adds the two together.
-
-**Covers:** [Cost](../architecture/cost.md)
 
 This is API-equivalent cost, not what the subscription charges.
 

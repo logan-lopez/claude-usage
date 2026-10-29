@@ -1,9 +1,10 @@
+---
+sources: ["src/limits.ts", "src/query.ts", "src/format.ts"]
+---
 # Limits
 
 Limit readings come from four sources of different freshness. They are archived as samples, and
 each meter is reconciled to the freshest source that carries it, keeping that source and its age.
-
-**Sources:** `src/limits.ts`, `src/query.ts`, `src/format.ts`
 
 **History:** [brief 01](../briefs/archive/01-archiver-and-session-views.md),
 [brief 02](../briefs/archive/02-cli-reports-and-binaries.md)

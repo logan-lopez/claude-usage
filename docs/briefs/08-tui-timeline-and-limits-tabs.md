@@ -1,6 +1,9 @@
+---
+size: L
+size-note: "Two screens and a `blocks()` speedup with a parity oracle, each about Breakdown's size."
+status: awaiting-review
+---
 # Brief 08: The Timeline and Limits tabs
-
-**Size:** L. Two screens and a `blocks()` speedup with a parity oracle, each about Breakdown's size.
 
 Read `CLAUDE.md`, [`README.md`](README.md), [the TUI page](../architecture/tui.md), [the limits
 page](../architecture/limits.md), [the over-time guide page](../guide/over-time.md), [the limits

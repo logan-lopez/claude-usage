@@ -1,9 +1,10 @@
+---
+covers: ["docs/architecture/cli.md", "docs/architecture/ingest.md", "docs/architecture/cost.md"]
+---
 # Sessions
 
 Every Claude Code chat is a session. cusage can show one in full, list them, group them, and say
 which agents, skills, MCP servers and tools the tokens went to.
-
-**Covers:** [CLI](../architecture/cli.md), [Ingest](../architecture/ingest.md), [Cost](../architecture/cost.md)
 
 ## One session
 
