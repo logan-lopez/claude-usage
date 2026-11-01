@@ -1,6 +1,6 @@
 ---
 description: "Pinned to the exact version Ink resolves, and patched"
-covers: []
+covers: ["docs/architecture/tui.md"]
 ---
 # `string-width`
 

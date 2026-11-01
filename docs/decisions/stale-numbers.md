@@ -1,6 +1,6 @@
 ---
 description: "Every limit carries its source and age"
-covers: []
+covers: ["docs/architecture/limits.md"]
 ---
 # Stale numbers
 

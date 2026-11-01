@@ -1,7 +1,7 @@
 ---
 description: "When the tabs and a drilled title don't fit the width, every tab but the stack's bottom one shrinks to its digit"
 decided: 2026-09-06
-covers: []
+covers: ["docs/architecture/tui.md"]
 ---
 # TUI tab bar
 

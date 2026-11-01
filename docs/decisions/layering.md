@@ -1,6 +1,6 @@
 ---
 description: "`query.ts` → data, `format.ts` → strings, `cli.ts` → argv"
-covers: []
+covers: ["docs/architecture/cli.md"]
 ---
 # Layering
 

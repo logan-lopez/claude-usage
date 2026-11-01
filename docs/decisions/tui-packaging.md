@@ -1,6 +1,6 @@
 ---
 description: "`src/tui.ts` is its own bin"
-covers: []
+covers: ["docs/architecture/tui.md", "docs/architecture/cli.md"]
 ---
 # TUI packaging
 

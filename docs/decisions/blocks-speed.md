@@ -2,7 +2,7 @@
 description: "Fixed inside `blocks()` only, deep-equal to the old code"
 decided: 2026-10-28
 by: "Logan"
-covers: []
+covers: ["docs/architecture/limits.md"]
 ---
 # `blocks()` speed
 

@@ -1,6 +1,6 @@
 ---
 description: "`GET api.anthropic.com/api/oauth/usage` only, from `src/oauth.ts`, behind a 3-minute floor on attempts that config can raise but not lower"
-covers: []
+covers: ["docs/architecture/network.md"]
 ---
 # Network
 

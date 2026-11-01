@@ -2,7 +2,7 @@
 description: "A Breakdown tab with drill-down, not a grouping toggle on Sessions"
 decided: 2026-10-28
 by: "Logan"
-covers: []
+covers: ["docs/architecture/tui.md"]
 ---
 # TUI grouping
 

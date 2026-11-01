@@ -1,6 +1,6 @@
 ---
 description: "`cusage pricing --refresh` cancelled"
-covers: []
+covers: ["docs/architecture/cost.md"]
 ---
 # Pricing refresh
 

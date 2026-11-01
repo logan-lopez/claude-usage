@@ -1,6 +1,6 @@
 ---
 description: "Grouped in JavaScript over two flat scans (requests summed per message, then `tool_calls`), not in SQL"
-covers: []
+covers: ["docs/architecture/cli.md"]
 ---
 # Tool attribution
 

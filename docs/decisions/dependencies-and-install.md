@@ -1,6 +1,6 @@
 ---
 description: "Dependencies allowed"
-covers: []
+covers: ["docs/architecture/build-and-install.md"]
 ---
 # Dependencies and install
 

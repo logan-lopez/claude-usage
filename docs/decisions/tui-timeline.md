@@ -2,7 +2,7 @@
 description: "Bars of output tokens with a ▲ cursor"
 decided: 2026-10-28
 by: "Logan"
-covers: []
+covers: ["docs/architecture/tui.md"]
 ---
 # TUI Timeline
 

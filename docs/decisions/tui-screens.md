@@ -2,7 +2,7 @@
 description: "Each screen's hook returns a `ScreenModel`"
 decided: 2026-10-18
 by: "Logan"
-covers: []
+covers: ["docs/architecture/tui.md"]
 ---
 # TUI screens
 

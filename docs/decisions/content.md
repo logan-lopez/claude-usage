@@ -1,6 +1,6 @@
 ---
 description: "Never ingested: tool names and token counts only"
-covers: []
+covers: ["docs/architecture/ingest.md", "docs/architecture/network.md"]
 ---
 # Content
 

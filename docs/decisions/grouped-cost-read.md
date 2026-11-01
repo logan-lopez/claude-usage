@@ -1,6 +1,6 @@
 ---
 description: "`groupSessions` reads each (session, group) pair with its lifetime counts and measured cost in one statement"
-covers: []
+covers: ["docs/architecture/cost.md"]
 ---
 # Grouped cost read
 

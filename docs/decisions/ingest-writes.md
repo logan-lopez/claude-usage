@@ -1,6 +1,6 @@
 ---
 description: "One atomic keep-max UPSERT"
-covers: []
+covers: ["docs/architecture/ingest.md"]
 ---
 # Ingest writes
 

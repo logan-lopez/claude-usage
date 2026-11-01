@@ -1,6 +1,6 @@
 ---
 description: "Frozen, allowlist-scrubbed, committed"
-covers: []
+covers: ["docs/architecture/fixtures.md"]
 ---
 # Fixtures
 

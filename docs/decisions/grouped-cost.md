@@ -1,6 +1,6 @@
 ---
 description: "Exact or absent: straddling sessions counted, their cost excluded, column marked `+`"
-covers: []
+covers: ["docs/architecture/cost.md"]
 ---
 # Grouped cost
 
