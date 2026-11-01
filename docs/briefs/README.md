@@ -64,29 +64,9 @@ now. For that, read `CLAUDE.md` and the code.
 
 ## Decisions already made
 
-Don't relitigate these. If one turns out to be wrong in practice, stop and say so.
-
-| Decision | Choice | Why |
-| --- | --- | --- |
-| TUI packaging | `src/tui.ts` is its own bin; `react`, `ink` and `@inkjs/ui` stay out of the CLI's import graph | Launchd runs the CLI hourly and the statusline polls it; neither may pay React's startup. `tests/cli.test.ts` enforces it. (`CLAUDE.md`) |
-| Layering | `query.ts` → data, `format.ts` → strings, `cli.ts` → argv | `--json`/`--csv` never load `format.ts`; `format.ts` never takes a `Database`, so every view is unit-testable. (`CLAUDE.md`, brief 02) |
-| Request key | `requests` is `WITHOUT ROWID`; `request_id` is `''`, never `NULL` | 228 records have no `requestId`; nullable PK columns would re-insert them every sync. (`CLAUDE.md`) |
-| Ingest writes | One atomic keep-max UPSERT; offsets to the last complete newline, re-read on shrink or inode change, commit per file | Read-then-write degrades to "keep last", and last is the smallest streaming snapshot. (`CLAUDE.md`) |
-| Dependencies and install | Dependencies allowed; install is compiled CLI and TUI binaries in `~/.local/bin` | `bun build --compile` starts in ~39 ms against ~98 ms and needs no `node_modules` under launchd. (`CLAUDE.md`, brief 02 §7) |
-| `string-width` | Pinned to the exact version Ink resolves, and patched | Unpatched, ~90% of each keypress is one Unicode regex; Bun keys patches by exact version. `tests/tui/string-width.test.ts` catches a bump. (`CLAUDE.md`) |
-| Network | `GET api.anthropic.com/api/oauth/usage` only, from `src/oauth.ts`, behind a 3-minute floor on attempts that config can raise but not lower | "No network ever" kept a 27-hour-stale 53% on screen while the real figure was 74%. (`CLAUDE.md`) |
-| Pricing refresh | `cusage pricing --refresh` cancelled; `tools/refresh-pricing.ts` is run by hand | Keeps one host for shipped code, stated flatly. (brief 02) |
-| Stale numbers | Every limit carries its source and age; meters reconciled per meter by freshness; disagreements reported, never averaged | The first `renderLimits` printed a bold 53% with no age. (`CLAUDE.md`) |
-| Grouped cost | Exact or absent: straddling sessions counted, their cost excluded, column marked `+` | cost-state is per session; summing it into every group turned $90 into $226 on the fixture. (README, Known limits) |
-| Fixtures | Frozen, allowlist-scrubbed, committed; `BASELINE.json` from a second dedup in `tools/make-fixture.ts` | Expected numbers read from `src/ingest.ts` would only prove it agrees with itself. (`CLAUDE.md`) |
-| TUI screens | Each screen's hook returns a `ScreenModel`; `TABS` drives the tab bar and digit keys; the shell reloads the screen that's showing and marks the rest stale, reloading a stale one before it's shown; Detail and drilled Sessions are pushed, not tabs | Adding a tab was six edits in `App.tsx`. A new tab can't forget to reload. Reloading every screen ran hidden tabs' queries on every change, up to 2.6 s of synchronous SQLite. (Logan, 2026-10-18, brief 05; reload changed 2026-10-28, brief 06) |
-| TUI grouping | A Breakdown tab with drill-down, not a grouping toggle on Sessions; Sessions stays flat | Regrouping while keeping selection and filters was the hard part of the toggle, and drilling answers the same question. (Logan, 2026-10-28, brief 07) |
-| Tool attribution | Grouped in JavaScript over two flat scans (requests summed per message, then `tool_calls`), not in SQL; the old SQL is the parity oracle in `tests/reports.test.ts` | 2.6 s in SQL's `DISTINCT` and correlated `EXISTS`, about 490 ms in its best `GROUP BY` shape, about 200 ms this way on 93K requests. ([CLI page](../architecture/cli.md), brief 06) |
-| Grouped cost read | `groupSessions` reads each (session, group) pair with its lifetime counts and measured cost in one statement; the old per-session loop is the parity oracle in `tests/query.test.ts` | Three queries per session took about 330 ms for project over 30 days on 93K requests, over Breakdown's 300 ms line; one statement takes about 230 ms, identical on the live archive. ([Cost page](../architecture/cost.md), brief 07) |
-| TUI Timeline | Bars of output tokens with a ▲ cursor; the split by model, project or effort is a table of the cursor's bucket, not stacked bars; no cost column; one book-comparison line at the top | Cache reads are 97.9% of total tokens, so total bars chart context size. 365 projects and the WCAG palette test rule out per-series colours. Cost by day reads $0.00 today. (Logan, 2026-10-28, brief 08) |
-| `blocks()` speed | Fixed inside `blocks()` only, deep-equal to the old code; `requestWhere` untouched | Its `$x IS NULL OR` shape defeats `requests_ts`, one full scan per cycle: 1557 ms at 30 days. Fixing every caller is in `FUTURE.md`. (Logan, 2026-10-28, brief 08) |
-| TUI tab bar | When the tabs and a drilled title don't fit the width, every tab but the stack's bottom one shrinks to its digit | Five tabs and `▸ Sessions · 2026-09-06 UTC` don't fit 80 columns; truncating the title hid where you are. (brief 08) |
-| Content | Never ingested: tool names and token counts only; credentials read once, never stored | Privacy. (`CLAUDE.md`, README) |
+Don't relitigate these. They're in [docs/decisions/](../decisions/README.md),
+one file each, and `docket decisions` lists them. If one turns out to be wrong in practice, stop
+and say so.
 
 ## Not built
 
