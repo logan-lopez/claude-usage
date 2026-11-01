@@ -24,22 +24,44 @@ Logan's notes on cusage are in his Obsidian vault,
 files, and leave them to him. `Docs/` there is a symlink to `docs/`, so write docs in the repo,
 and add nothing under `Docs/`.
 
+### This repo is public
+
+Everything committed here is public, and so are commit messages and PR descriptions. Keep
+Logan's other work and his machine out of it:
+
+- Don't name his other projects, private repos or clients. Say "another project" instead, unless
+  the name is already public in this repo for a reason.
+- No paths outside the repo. Write `~/…`, never `/Users/<name>/…`, and no temp or cache paths
+  (`/private/var/folders/…`). Scrub them from fixtures, snapshots, logs and generated reports
+  before committing.
+- Don't quote his notes, vault, chat or agent transcripts, app history, email or calendar. Don't
+  copy real data into fixtures: make it up.
+- No hostnames, local usernames, email addresses other than the commit author, account IDs,
+  tokens or API keys, including in example configs and `.env` samples.
+- Check screenshots and recordings for other windows, paths, notifications and account names.
+- Anything a script generates from local data (stats, reports, benchmarks) gets aggregated and
+  anonymized before it's committed.
+- If something private is already committed but not pushed, fix it by amending or rewriting the
+  unpushed commits. If it's already pushed, stop and tell Logan. Don't force-push on your own.
+- When unsure whether something is identifying, ask before committing.
+- Add this project's exceptions below this list.
+
 ### Commands
 
 Default to Bun over Node: `bun <file>`, `bun test`, `bun install`, `bun run <script>`. Bun loads
 `.env` automatically; don't add `dotenv`.
 
-| | |
-|---|---|
-| `bun test` (or `make test`) | the offline suite, against `fixtures/` |
-| `bun run typecheck` | `bunx tsc --noEmit` |
-| `make build` | compile `dist/cusage` and `dist/cusage-tui` |
-| `make install` | rebuild, then atomically replace both in `~/.local/bin` (`BIN_DIR` overrides). Doesn't reload the agents |
-| `bun run fixture` | regenerate `fixtures/` from the live corpus, with `MANIFEST.json` and `BASELINE.json` |
-| `bun run tools/make-pricing-calibration.ts` | regenerate `fixtures/pricing-calibration.json` from the live archive |
-| `./scripts/install-agents.sh`, `./scripts/uninstall-agents.sh` | install or remove the two launchd agents |
-| `python3 tools/tui-pty-smoke.py <db>` | PTY smoke test of the TUI (startup, resize, navigation, terminal restore). Use a scrubbed fixture archive, never the live one |
-| `bun run tools/refresh-pricing.ts [--rates <file>]` | developer-only: fetch pricing docs, then apply reviewed rates |
+|                                                                |                                                                                                                               |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `bun test` (or `make test`)                                    | the offline suite, against `fixtures/`                                                                                        |
+| `bun run typecheck`                                            | `bunx tsc --noEmit`                                                                                                           |
+| `make build`                                                   | compile `dist/cusage` and `dist/cusage-tui`                                                                                   |
+| `make install`                                                 | rebuild, then atomically replace both in `~/.local/bin` (`BIN_DIR` overrides). Doesn't reload the agents                      |
+| `bun run fixture`                                              | regenerate `fixtures/` from the live corpus, with `MANIFEST.json` and `BASELINE.json`                                         |
+| `bun run tools/make-pricing-calibration.ts`                    | regenerate `fixtures/pricing-calibration.json` from the live archive                                                          |
+| `./scripts/install-agents.sh`, `./scripts/uninstall-agents.sh` | install or remove the two launchd agents                                                                                      |
+| `python3 tools/tui-pty-smoke.py <db>`                          | PTY smoke test of the TUI (startup, resize, navigation, terminal restore). Use a scrubbed fixture archive, never the live one |
+| `bun run tools/refresh-pricing.ts [--rates <file>]`            | developer-only: fetch pricing docs, then apply reviewed rates                                                                 |
 
 ### Rules that aren't obvious from the code
 
@@ -63,7 +85,7 @@ Each is the kind of thing a reasonable refactor deletes. The page linked has the
   prompts, or `~/.claude.json` identity keys. Credentials sign one request and are dropped
   ([Ingest](docs/architecture/ingest.md), [Network](docs/architecture/network.md)).
 - **One host: `GET https://api.anthropic.com/api/oauth/usage`, only from `src/oauth.ts`.** The
-  floor is 3 minutes between *attempts*, persisted in `meta`, `Math.max(180_000, env)`, and
+  floor is 3 minutes between _attempts_, persisted in `meta`, `Math.max(180_000, env)`, and
   `--refresh` doesn't bypass it. `refreshFromApi` never throws. No dependency may add a host. Keep
   `tests/refresh.test.ts` ([Network](docs/architecture/network.md)).
 - **Never present a stale number as current.** Every limit carries its source and age, meters are
@@ -95,13 +117,13 @@ sentence on a page untrue, fix the page in the same commit. A new area gets a pa
 pointer in `.claude/rules/` (Claude Code loads the matching one by itself; this table is the same
 map for every agent).
 
-| Code | Read first |
-| --- | --- |
-| `tools/build.ts`, `src/version.ts`, `Makefile`, `launchd/**`, `scripts/**` | [Build and install](docs/architecture/build-and-install.md) |
-| `src/cli.ts`, `src/args.ts`, `src/format.ts`, `src/serialize.ts`, `src/doctor.ts`, `src/time.ts`, `src/query.ts` | [The CLI and its reports](docs/architecture/cli.md) |
-| `src/pricing.ts`, `src/pricing-snapshot.json`, `tools/refresh-pricing.ts`, `tools/make-pricing-calibration.ts`, `src/query.ts` | [Pricing and cost](docs/architecture/cost.md) |
-| `tools/make-fixture.ts`, `fixtures/**`, `tests/fixture.test.ts`, `tests/helpers.ts` | [Fixtures and the test suite](docs/architecture/fixtures.md) |
-| `src/ingest.ts`, `src/schema.ts`, `src/paths.ts` | [Ingest and the archive](docs/architecture/ingest.md) |
-| `src/limits.ts`, `src/query.ts`, `src/format.ts` | [Limits](docs/architecture/limits.md) |
-| `src/oauth.ts`, `src/statusline.ts`, `tests/refresh.test.ts` | [Network](docs/architecture/network.md) |
-| `src/tui.ts`, `src/tui/**`, `patches/**` | [The explorer (TUI)](docs/architecture/tui.md) |
+| Code                                                                                                                           | Read first                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `tools/build.ts`, `src/version.ts`, `Makefile`, `launchd/**`, `scripts/**`                                                     | [Build and install](docs/architecture/build-and-install.md)  |
+| `src/cli.ts`, `src/args.ts`, `src/format.ts`, `src/serialize.ts`, `src/doctor.ts`, `src/time.ts`, `src/query.ts`               | [The CLI and its reports](docs/architecture/cli.md)          |
+| `src/pricing.ts`, `src/pricing-snapshot.json`, `tools/refresh-pricing.ts`, `tools/make-pricing-calibration.ts`, `src/query.ts` | [Pricing and cost](docs/architecture/cost.md)                |
+| `tools/make-fixture.ts`, `fixtures/**`, `tests/fixture.test.ts`, `tests/helpers.ts`                                            | [Fixtures and the test suite](docs/architecture/fixtures.md) |
+| `src/ingest.ts`, `src/schema.ts`, `src/paths.ts`                                                                               | [Ingest and the archive](docs/architecture/ingest.md)        |
+| `src/limits.ts`, `src/query.ts`, `src/format.ts`                                                                               | [Limits](docs/architecture/limits.md)                        |
+| `src/oauth.ts`, `src/statusline.ts`, `tests/refresh.test.ts`                                                                   | [Network](docs/architecture/network.md)                      |
+| `src/tui.ts`, `src/tui/**`, `patches/**`                                                                                       | [The explorer (TUI)](docs/architecture/tui.md)               |
