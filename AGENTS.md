@@ -89,10 +89,11 @@ Each is the kind of thing a reasonable refactor deletes. The page linked has the
 ### Areas
 
 `docs/architecture/` has one page per area, describing the code as it is now (start with [the
-overview](docs/architecture/README.md)). Before changing code in an area, read its page. When a
-change makes a sentence on a page untrue, fix the page in the same commit. A new area gets a page, a
-row here and a pointer in `.claude/rules/` (Claude Code loads the matching one by itself; this table
-is the same map for every agent).
+overview](docs/architecture/README.md)). Before changing code in an area, read its page. `docket
+context <path>` lists the pages, decisions and open briefs that bind a file. When a change makes a
+sentence on a page untrue, fix the page in the same commit. A new area gets a page, a row here and a
+pointer in `.claude/rules/` (Claude Code loads the matching one by itself; this table is the same
+map for every agent).
 
 | Code | Read first |
 | --- | --- |
